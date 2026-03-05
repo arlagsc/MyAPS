@@ -1,0 +1,89 @@
+<!-- 日历管理 -->
+<div class="tab-pane fade" id="tab-calendar">
+    <h4 class="mb-4"><i class="fas fa-calendar-alt"></i> 日历管理</h4>
+    
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="content-card">
+                <h5><i class="fas fa-cogs"></i> 日历设置</h5>
+                <div class="row mt-3">
+                    <div class="col-md-3">
+                        <label class="form-label">选择车间</label>
+                        <select class="form-select" id="calendarWorkshop">
+                            <option value="SMT">SMT车间</option>
+                            <option value="DIP">DIP车间</option>
+                            <option value="ASSEMBLY">总装车间</option>
+                            <option value="WAREHOUSE">仓库</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">开始日期</label>
+                        <input type="date" class="form-control" id="calendarStartDate">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">结束日期</label>
+                        <input type="date" class="form-control" id="calendarEndDate">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">生成规则</label>
+                        <select class="form-select" id="calendarPattern">
+                            <option value="weekend_off">周末休息</option>
+                            <option value="all_work">全年无休</option>
+                            <option value="alternate">轮休模式</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <button class="btn btn-primary" onclick="generateCalendar()">
+                        <i class="fas fa-magic"></i> 生成日历
+                    </button>
+                    <button class="btn btn-success" onclick="exportCalendar()">
+                        <i class="fas fa-download"></i> 导出
+                    </button>
+                    <button class="btn btn-outline-danger" onclick="clearCalendar()">
+                        <i class="fas fa-trash"></i> 清空
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="content-card">
+        <h5><i class="fas fa-calendar-week"></i> 日历概览</h5>
+        <div class="table-responsive mt-3">
+            <table class="table table-sm">
+                <thead>
+                    <tr>
+                        <th>车间</th>
+                        <th>总天数</th>
+                        <th>工作日</th>
+                        <th>休息日</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="calendarSummaryBody">
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <div class="content-card mt-4">
+        <h5><i class="fas fa-list"></i> 日历明细</h5>
+        <div class="table-responsive mt-3">
+            <table class="table table-hover table-sm">
+                <thead>
+                    <tr>
+                        <th>日期</th>
+                        <th>车间</th>
+                        <th>是否上班</th>
+                        <th>班次</th>
+                        <th>工作时间</th>
+                        <th>备注</th>
+                    </tr>
+                </thead>
+                <tbody id="calendarDetailBody">
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

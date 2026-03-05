@@ -5,7 +5,7 @@ API 路由 - 产线配置、标产数据、接口管理
 from flask import Blueprint, jsonify, request
 from database_extend import (
     ProductLineMappingDAO, CapacityStandardsDAO, LineConfigDAO,
-    APILogDAO, get_db_connection
+    APILogDAO, get_db_connection, CalendarDAO
 )
 from adapters.base import AdapterFactory
 from datetime import datetime
@@ -605,4 +605,165 @@ def sync_product_line_mapping():
         
     except Exception as e:
         logger.error(f"导入产品-产线映射失败: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+# ==========================================
+# 日历管理 API
+# ==========================================
+
+@api_bp.route('/calendar/workshops', methods=['GET'])
+def get_workshops():
+    """获取所有车间"""
+    workshops = CalendarDAO.get_workshops()
+    return jsonify(workshops)
+
+
+@api_bp.route('/calendar', methods=['GET'])
+def get_calendar():
+    """获取日历数据"""
+    workshop_code = request.args.get('workshop_code')
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    
+    data = CalendarDAO.get_all(workshop_code, start_date, end_date)
+    return jsonify(data)
+
+
+@api_bp.route('/calendar/export', methods=['GET'])
+def export_calendar():
+    """导出日历"""
+    workshop_code = request.args.get('workshop_code')
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    
+    data = CalendarDAO.export(workshop_code, start_date, end_date)
+    
+    # 返回 CSV 格式
+    if request.args.get('format') == 'csv':
+        import csv
+        import io
+        
+        output = io.StringIO()
+        if data:
+            writer = csv.DictWriter(output, fieldnames=data[0].keys())
+            writer.writeheader()
+            writer.writerows(data)
+        
+        return output.getvalue(), 200, {
+            'Content-Type': 'text/csv',
+            'Content-Disposition': f'attachment; filename=calendar_{workshop_code or "all"}.csv'
+        }
+    
+    return jsonify({
+        'success': True,
+        'count': len(data),
+        'data': data
+    })
+
+
+@api_bp.route('/calendar/import', methods=['POST'])
+def import_calendar():
+    """导入日历"""
+    data = request.json
+    
+    if not data or not isinstance(data, list):
+        return jsonify({'success': False, 'message': '数据格式错误'}), 400
+    
+    try:
+        count = CalendarDAO.import_batch(data)
+        return jsonify({
+            'success': True,
+            'message': f'导入成功! 共 {count} 条',
+            'count': count
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@api_bp.route('/calendar/generate', methods=['POST'])
+def generate_calendar():
+    """生成日历 - 根据规则自动生成"""
+    workshop_code = request.json.get('workshop_code')
+    start_date = request.json.get('start_date')
+    end_date = request.json.get('end_date')
+    pattern = request.json.get('pattern', 'weekend_off')  # weekend_off, all_work, alternate
+    
+    if not workshop_code or not start_date or not end_date:
+        return jsonify({'success': False, 'message': '缺少必要参数'}), 400
+    
+    from datetime import datetime, timedelta
+    
+    start = datetime.strptime(start_date, '%Y-%m-%d')
+    end = datetime.strptime(end_date, '%Y-%m-%d')
+    
+    workshop_names = {
+        'SMT': 'SMT车间',
+        'DIP': 'DIP车间', 
+        'ASSEMBLY': '总装车间',
+        'WAREHOUSE': '仓库'
+    }
+    
+    data_list = []
+    current = start
+    while current <= end:
+        is_workday = 1
+        shift_type = 'FULL'
+        notes = ''
+        
+        weekday = current.weekday()  # 0=Monday, 6=Sunday
+        
+        if pattern == 'weekend_off':
+            # 周末休息
+            if weekday >= 5:  # Saturday, Sunday
+                is_workday = 0
+                notes = '周末休息'
+        elif pattern == 'all_work':
+            # 全年无休
+            is_workday = 1
+        elif pattern == 'alternate':
+            # 交替轮休
+            week_num = (current - start).days // 7
+            if week_num % 2 == 0:
+                if weekday >= 5:
+                    is_workday = 0
+                    notes = '轮休'
+        
+        data_list.append({
+            'workshop_code': workshop_code,
+            'workshop_name': workshop_names.get(workshop_code, workshop_code),
+            'calendar_date': current.strftime('%Y-%m-%d'),
+            'is_workday': is_workday,
+            'shift_type': shift_type,
+            'work_start_time': '08:00',
+            'work_end_time': '20:00' if is_workday else None,
+            'notes': notes
+        })
+        
+        current += timedelta(days=1)
+    
+    try:
+        count = CalendarDAO.import_batch(data_list)
+        return jsonify({
+            'success': True,
+            'message': f'生成成功! 共 {count} 条',
+            'count': count
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@api_bp.route('/calendar', methods=['DELETE'])
+def delete_calendar():
+    """删除日历"""
+    workshop_code = request.args.get('workshop_code')
+    
+    try:
+        count = CalendarDAO.delete(workshop_code)
+        return jsonify({
+            'success': True,
+            'message': f'删除成功! 共 {count} 条',
+            'count': count
+        })
+    except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500

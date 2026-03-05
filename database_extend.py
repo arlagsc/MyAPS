@@ -189,6 +189,27 @@ def migrate_extend_tables():
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_line_config_type ON line_config(line_type)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_api_logs_type ON api_logs(api_type)')
         
+        # 7. 日历表 - 支持不同车间
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS calendars (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                workshop_code TEXT NOT NULL,
+                workshop_name TEXT,
+                calendar_date TEXT NOT NULL,
+                is_workday INTEGER DEFAULT 1,
+                shift_type TEXT DEFAULT 'FULL',
+                work_start_time TEXT DEFAULT '08:00',
+                work_end_time TEXT DEFAULT '20:00',
+                notes TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(workshop_code, calendar_date)
+            )
+        ''')
+        
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_calendar_workshop ON calendars(workshop_code)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_calendar_date ON calendars(calendar_date)')
+        
     logger.info("数据库迁移完成")
 
 
@@ -408,6 +429,94 @@ class APILogDAO:
                 "SELECT * FROM api_logs ORDER BY created_at DESC LIMIT ?", (limit,)
             ).fetchall()
             return [dict(row) for row in rows]
+
+
+class CalendarDAO:
+    """日历 DAO"""
+    
+    # 车间类型
+    WORKSHOP_TYPES = {
+        'SMT': 'SMT车间',
+        'DIP': 'DIP车间',
+        'ASSEMBLY': '总装车间',
+        'WAREHOUSE': '仓库'
+    }
+    
+    @staticmethod
+    def get_workshops() -> List[Dict]:
+        """获取所有车间"""
+        with get_db_connection() as conn:
+            rows = conn.execute("""
+                SELECT workshop_code, workshop_name, COUNT(*) as days_count,
+                       SUM(CASE WHEN is_workday = 1 THEN 1 ELSE 0 END) as workdays
+                FROM calendars 
+                GROUP BY workshop_code, workshop_name
+            """).fetchall()
+            return [dict(row) for row in rows]
+    
+    @staticmethod
+    def get_all(workshop_code: str = None, start_date: str = None, end_date: str = None) -> List[Dict]:
+        """获取日历数据"""
+        with get_db_connection() as conn:
+            query = "SELECT * FROM calendars WHERE 1=1"
+            params = []
+            
+            if workshop_code:
+                query += " AND workshop_code = ?"
+                params.append(workshop_code)
+            if start_date:
+                query += " AND calendar_date >= ?"
+                params.append(start_date)
+            if end_date:
+                query += " AND calendar_date <= ?"
+                params.append(end_date)
+            
+            query += " ORDER BY workshop_code, calendar_date"
+            
+            rows = conn.execute(query, params).fetchall()
+            return [dict(row) for row in rows]
+    
+    @staticmethod
+    def import_batch(data_list: List[Dict]) -> int:
+        """批量导入日历"""
+        count = 0
+        with get_db_connection() as conn:
+            for data in data_list:
+                try:
+                    conn.execute('''
+                        INSERT OR REPLACE INTO calendars (
+                            workshop_code, workshop_name, calendar_date, 
+                            is_workday, shift_type, work_start_time, work_end_time, notes
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        data.get('workshop_code'),
+                        data.get('workshop_name'),
+                        data.get('calendar_date'),
+                        data.get('is_workday', 1),
+                        data.get('shift_type', 'FULL'),
+                        data.get('work_start_time', '08:00'),
+                        data.get('work_end_time', '20:00'),
+                        data.get('notes')
+                    ))
+                    count += 1
+                except Exception as e:
+                    logging.warning(f"导入日历失败: {e}")
+        return count
+    
+    @staticmethod
+    def export(workshop_code: str = None, start_date: str = None, end_date: str = None) -> List[Dict]:
+        """导出日历数据"""
+        return CalendarDAO.get_all(workshop_code, start_date, end_date)
+    
+    @staticmethod
+    def delete(workshop_code: str = None) -> int:
+        """删除日历数据"""
+        with get_db_connection() as conn:
+            if workshop_code:
+                conn.execute("DELETE FROM calendars WHERE workshop_code = ?", (workshop_code,))
+            else:
+                conn.execute("DELETE FROM calendars")
+            return conn.total_changes
 
 
 # ==========================================

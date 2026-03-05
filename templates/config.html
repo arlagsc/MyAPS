@@ -43,6 +43,9 @@
                 <a class="nav-link" href="#tab-resources" data-bs-toggle="tab">
                     <i class="fas fa-industry"></i> 产线管理
                 </a>
+                <a class="nav-link" href="#tab-calendar" data-bs-toggle="tab">
+                    <i class="fas fa-calendar-alt"></i> 日历管理
+                </a>
                 <a class="nav-link" href="#tab-sync" data-bs-toggle="tab">
                     <i class="fas fa-sync"></i> 数据同步
                 </a>
@@ -51,7 +54,96 @@
                     <i class="fas fa-arrow-left"></i> 返回看板
                 </a>
             </nav>
+        <!-- 日历管理 -->
+<div class="tab-pane fade" id="tab-calendar">
+    <h4 class="mb-4"><i class="fas fa-calendar-alt"></i> 日历管理</h4>
+    
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="content-card">
+                <h5><i class="fas fa-cogs"></i> 日历设置</h5>
+                <div class="row mt-3">
+                    <div class="col-md-3">
+                        <label class="form-label">选择车间</label>
+                        <select class="form-select" id="calendarWorkshop">
+                            <option value="SMT">SMT车间</option>
+                            <option value="DIP">DIP车间</option>
+                            <option value="ASSEMBLY">总装车间</option>
+                            <option value="WAREHOUSE">仓库</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">开始日期</label>
+                        <input type="date" class="form-control" id="calendarStartDate">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">结束日期</label>
+                        <input type="date" class="form-control" id="calendarEndDate">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">生成规则</label>
+                        <select class="form-select" id="calendarPattern">
+                            <option value="weekend_off">周末休息</option>
+                            <option value="all_work">全年无休</option>
+                            <option value="alternate">轮休模式</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <button class="btn btn-primary" onclick="generateCalendar()">
+                        <i class="fas fa-magic"></i> 生成日历
+                    </button>
+                    <button class="btn btn-success" onclick="exportCalendar()">
+                        <i class="fas fa-download"></i> 导出
+                    </button>
+                    <button class="btn btn-outline-danger" onclick="clearCalendar()">
+                        <i class="fas fa-trash"></i> 清空
+                    </button>
+                </div>
+            </div>
         </div>
+    </div>
+    
+    <div class="content-card">
+        <h5><i class="fas fa-calendar-week"></i> 日历概览</h5>
+        <div class="table-responsive mt-3">
+            <table class="table table-sm">
+                <thead>
+                    <tr>
+                        <th>车间</th>
+                        <th>总天数</th>
+                        <th>工作日</th>
+                        <th>休息日</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="calendarSummaryBody">
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <div class="content-card mt-4">
+        <h5><i class="fas fa-list"></i> 日历明细</h5>
+        <div class="table-responsive mt-3">
+            <table class="table table-hover table-sm">
+                <thead>
+                    <tr>
+                        <th>日期</th>
+                        <th>车间</th>
+                        <th>是否上班</th>
+                        <th>班次</th>
+                        <th>工作时间</th>
+                        <th>备注</th>
+                    </tr>
+                </thead>
+                <tbody id="calendarDetailBody">
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+</div>
 
         <!-- 主内容区 -->
         <div class="col-md-10 p-4">
@@ -341,6 +433,14 @@ document.addEventListener('DOMContentLoaded', function() {
     loadCapacities();
     loadResources();
     checkAPIStatus();
+    loadCalendarSummary();
+    
+    // 设置默认日期（当前月）
+    const today = new Date();
+    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+    const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    document.getElementById('calendarStartDate').value = firstDay.toISOString().split('T')[0];
+    document.getElementById('calendarEndDate').value = lastDay.toISOString().split('T')[0];
 });
 
 // 加载概览数据
@@ -646,6 +746,100 @@ function importCapacityFromExcel() {
 
 function syncCapacity() {
     syncFromMES();
+}
+
+// 日历管理函数
+let currentCalendarData = [];
+
+function loadCalendarSummary() {
+    fetch('/api/calendar/workshops')
+        .then(res => res.json())
+        .then(data => {
+            const tbody = document.getElementById('calendarSummaryBody');
+            tbody.innerHTML = data.map(w => `
+                <tr>
+                    <td>${w.workshop_name || w.workshop_code}</td>
+                    <td>${w.days_count || 0}</td>
+                    <td><span class="badge bg-success">${w.workdays || 0}</span></td>
+                    <td><span class="badge bg-warning">${(w.days_count || 0) - (w.workdays || 0)}</span></td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-primary" onclick="loadCalendarDetail('${w.workshop_code}')">查看</button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="clearCalendar('${w.workshop_code}')">删除</button>
+                    </td>
+                </tr>
+            `).join('');
+        });
+}
+
+function loadCalendarDetail(workshopCode) {
+    fetch(`/api/calendar?workshop_code=${workshopCode || ''}`)
+        .then(res => res.json())
+        .then(data => {
+            currentCalendarData = data;
+            const tbody = document.getElementById('calendarDetailBody');
+            tbody.innerHTML = data.slice(0, 100).map(c => `
+                <tr class="${c.is_workday ? '' : 'table-secondary'}">
+                    <td>${c.calendar_date}</td>
+                    <td>${c.workshop_name || c.workshop_code}</td>
+                    <td>${c.is_workday ? '<span class="badge bg-success">上班</span>' : '<span class="badge bg-secondary">休息</span>'}</td>
+                    <td>${c.shift_type}</td>
+                    <td>${c.work_start_time || ''} - ${c.work_end_time || ''}</td>
+                    <td>${c.notes || '-'}</td>
+                </tr>
+            `).join('');
+        });
+}
+
+function generateCalendar() {
+    const workshop = document.getElementById('calendarWorkshop').value;
+    const startDate = document.getElementById('calendarStartDate').value;
+    const endDate = document.getElementById('calendarEndDate').value;
+    const pattern = document.getElementById('calendarPattern').value;
+    
+    if (!startDate || !endDate) {
+        alert('请选择开始和结束日期');
+        return;
+    }
+    
+    fetch('/api/calendar/generate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            workshop_code: workshop,
+            start_date: startDate,
+            end_date: endDate,
+            pattern: pattern
+        })
+    })
+    .then(res => res.json())
+    .then(data => {
+        alert(data.message);
+        loadCalendarSummary();
+        loadCalendarDetail(workshop);
+    });
+}
+
+function exportCalendar() {
+    const workshop = document.getElementById('calendarWorkshop').value;
+    window.open(`/api/calendar/export?workshop_code=${workshop}&format=csv`, '_blank');
+}
+
+function clearCalendar(workshop) {
+    if (!workshop) {
+        workshop = document.getElementById('calendarWorkshop').value;
+    }
+    
+    if (!confirm(`确定要清空 ${workshop} 的日历数据吗?`)) {
+        return;
+    }
+    
+    fetch(`/api/calendar?workshop_code=${workshop}`, {method: 'DELETE'})
+        .then(res => res.json())
+        .then(data => {
+            alert(data.message);
+            loadCalendarSummary();
+            loadCalendarDetail(workshop);
+        });
 }
 </script>
 
