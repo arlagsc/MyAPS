@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>APS 配置管理中心</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚙️</text></svg>">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        body { background-color: #f0f2f5; }
+        .sidebar { background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%); min-height: 100vh; padding: 20px 0; }
+        .sidebar .nav-link { color: rgba(255,255,255,0.7); padding: 12px 20px; border-radius: 8px; margin: 4px 10px; }
+        .sidebar .nav-link:hover, .sidebar .nav-link.active { background: rgba(255,255,255,0.15); color: #fff; }
+        .sidebar .nav-link i { width: 24px; }
+        .content-card { background: white; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); padding: 24px; margin-bottom: 20px; }
+        .stat-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 12px; padding: 20px; }
+        .stat-card.success { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
+        .stat-card.warning { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+        .stat-card.info { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
+        .table-header { background: #f8f9fa; }
+        .btn-action { padding: 4px 8px; font-size: 12px; }
+        .nav-tabs .nav-link { border: none; color: #666; }
+        .nav-tabs .nav-link.active { border-bottom: 3px solid #667eea; color: #667eea; font-weight: 600; }
+    </style>
+</head>
+<body>
+
+<div class="container-fluid">
+    <div class="row">
+        <!-- 侧边栏 -->
+        <div class="col-md-2 sidebar">
+            <h5 class="text-white text-center mb-4"><i class="fas fa-cogs"></i> 配置中心</h5>
+            <nav class="nav flex-column">
+                <a class="nav-link active" href="#tab-dashboard" data-bs-toggle="tab">
+                    <i class="fas fa-home"></i> 概览
+                </a>
+                <a class="nav-link" href="#tab-mapping" data-bs-toggle="tab">
+                    <i class="fas fa-project-diagram"></i> 产品-产线配置
+                </a>
+                <a class="nav-link" href="#tab-capacity" data-bs-toggle="tab">
+                    <i class="fas fa-tachometer-alt"></i> 标产数据
+                </a>
+                <a class="nav-link" href="#tab-resources" data-bs-toggle="tab">
+                    <i class="fas fa-industry"></i> 产线管理
+                </a>
+                <a class="nav-link" href="#tab-sync" data-bs-toggle="tab">
+                    <i class="fas fa-sync"></i> 数据同步
+                </a>
+                <hr class="text-secondary">
+                <a class="nav-link" href="/">
+                    <i class="fas fa-arrow-left"></i> 返回看板
+                </a>
+            </nav>
+        </div>
+
+        <!-- 主内容区 -->
+        <div class="col-md-10 p-4">
+            <div class="tab-content">
+                
+                <!-- 概览 -->
+                <div class="tab-pane fade show active" id="tab-dashboard">
+                    <h4 class="mb-4">系统概览</h4>
+                    <div class="row mb-4">
+                        <div class="col-md-3">
+                            <div class="stat-card">
+                                <h6><i class="fas fa-project-diagram"></i> 产品-产线配置</h6>
+                                <h2 id="stat-mapping">-</h2>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="stat-card success">
+                                <h6><i class="fas fa-tachometer-alt"></i> 标产数据</h6>
+                                <h2 id="stat-capacity">-</h2>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="stat-card warning">
+                                <h6><i class="fas fa-industry"></i> 产线配置</h6>
+                                <h2 id="stat-resources">-</h2>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="stat-card info">
+                                <h6><i class="fas fa-file-alt"></i> 订单数据</h6>
+                                <h2 id="stat-orders">-</h2>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="content-card">
+                        <h5><i class="fas fa-plug"></i> 接口状态</h5>
+                        <div class="row mt-3">
+                            <div class="col-md-6">
+                                <div class="d-flex align-items-center mb-3">
+                                    <span class="badge bg-success me-2" id="mes-status">●</span>
+                                    <strong>MES 接口:</strong>
+                                    <span class="ms-2" id="mes-url">-</span>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="d-flex align-items-center mb-3">
+                                    <span class="badge bg-success me-2" id="sap-status">●</span>
+                                    <strong>SAP 接口:</strong>
+                                    <span class="ms-2" id="sap-url">-</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 产品-产线配置 -->
+                <div class="tab-pane fade" id="tab-mapping">
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h4 class="m-0"><i class="fas fa-project-diagram"></i> 产品-产线配置</h4>
+                        <div>
+                            <button class="btn btn-success me-2" onclick="importFromExcel()">
+                                <i class="fas fa-file-import"></i> 从Excel导入
+                            </button>
+                            <button class="btn btn-primary" onclick="openMappingModal()">
+                                <i class="fas fa-plus"></i> 新增配置
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="content-card">
+                        <div class="row mb-3">
+                            <div class="col-md-3">
+                                <select class="form-select" id="filter-company" onchange="filterMappings()">
+                                    <option value="">全部公司</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <select class="form-select" id="filter-material-group" onchange="filterMappings()">
+                                    <option value="">全部物料组</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <select class="form-select" id="filter-line-type" onchange="filterMappings()">
+                                    <option value="">全部类型</option>
+                                    <option value="SMT">SMT</option>
+                                    <option value="DIP">DIP</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>公司</th>
+                                    <th>物料组</th>
+                                    <th>范围条件</th>
+                                    <th>适用产线</th>
+                                    <th>类型</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="mappingTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 标产数据 -->
+                <div class="tab-pane fade" id="tab-capacity">
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h4 class="m-0"><i class="fas fa-tachometer-alt"></i> 标产数据</h4>
+                        <div>
+                            <button class="btn btn-success me-2" onclick="syncCapacity()">
+                                <i class="fas fa-sync"></i> 同步MES标产
+                            </button>
+                            <button class="btn btn-primary" onclick="openCapacityModal()">
+                                <i class="fas fa-plus"></i> 新增标产
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="content-card">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>产线ID</th>
+                                    <th>产线名称</th>
+                                    <th>产能类型</th>
+                                    <th>标准产能</th>
+                                    <th>标准工时(分钟)</th>
+                                    <th>数据来源</th>
+                                    <th>生效日期</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="capacityTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 产线管理 -->
+                <div class="tab-pane fade" id="tab-resources">
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h4 class="m-0"><i class="fas fa-industry"></i> 产线管理</h4>
+                        <button class="btn btn-primary" onclick="openResourceModal()">
+                            <i class="fas fa-plus"></i> 新增产线
+                        </button>
+                    </div>
+                    
+                    <div class="content-card">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>产线ID</th>
+                                    <th>产线名称</th>
+                                    <th>类型</th>
+                                    <th>公司</th>
+                                    <th>工作时长(h)</th>
+                                    <th>效率系数</th>
+                                    <th>描述</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="resourceTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 数据同步 -->
+                <div class="tab-pane fade" id="tab-sync">
+                    <h4 class="mb-4"><i class="fas fa-sync"></i> 数据同步</h4>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="content-card">
+                                <h5><i class="fas fa-database"></i> 从外部系统同步</h5>
+                                <div class="d-grid gap-2 mt-3">
+                                    <button class="btn btn-primary" onclick="syncAllData()">
+                                        <i class="fas fa-cloud-download-alt"></i> 一键同步所有数据
+                                    </button>
+                                    <button class="btn btn-outline-primary" onclick="syncFromMES()">
+                                        <i class="fas fa-tachometer-alt"></i> 同步MES标产数据
+                                    </button>
+                                    <button class="btn btn-outline-primary" onclick="syncFromSAP()">
+                                        <i class="fas fa-shopping-cart"></i> 同步SAP订单数据
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="content-card">
+                                <h5><i class="fas fa-file-excel"></i> 从Excel导入</h5>
+                                <div class="d-grid gap-2 mt-3">
+                                    <button class="btn btn-success" onclick="importFromExcel()">
+                                        <i class="fas fa-file-import"></i> 导入产品-产线配置
+                                    </button>
+                                    <button class="btn btn-outline-success" onclick="importCapacityFromExcel()">
+                                        <i class="fas fa-file-import"></i> 导入标产数据
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="content-card mt-4">
+                        <h5><i class="fas fa-history"></i> 最近同步记录</h5>
+                        <table class="table table-sm mt-3">
+                            <thead>
+                                <tr>
+                                    <th>时间</th>
+                                    <th>类型</th>
+                                    <th>结果</th>
+                                    <th>详情</th>
+                                </tr>
+                            </thead>
+                            <tbody id="syncLogBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 新增/编辑映射模态框 -->
+<div class="modal fade" id="mappingModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">产品-产线配置</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="mappingForm">
+                    <input type="hidden" id="mappingId">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">公司代码</label>
+                            <select class="form-select" id="mappingCompany">
+                                <option value="1010">1010</option>
+                                <option value="1000">1000</option>
+                                <option value="1050">1050</option>
+                                <option value="5070">5070</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">物料组</label>
+                            <input type="text" class="form-control" id="mappingMaterialGroup" placeholder="如: 511, 513, 515">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">范围条件</label>
+                        <input type="text" class="form-control" id="mappingRange" placeholder="如: 所有, 5000以上, 3天累计5000以下">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">适用产线 (逗号分隔)</label>
+                        <input type="text" class="form-control" id="mappingLines" placeholder="如: S01, S02, S03">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">产线类型</label>
+                        <select class="form-select" id="mappingType">
+                            <option value="SMT">SMT</option>
+                            <option value="DIP">DIP</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="saveMapping()">保存</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+let currentMappings = [];
+let currentCapacities = [];
+let currentResources = [];
+
+// 初始化
+document.addEventListener('DOMContentLoaded', function() {
+    loadDashboard();
+    loadMappings();
+    loadCapacities();
+    loadResources();
+    checkAPIStatus();
+});
+
+// 加载概览数据
+async function loadDashboard() {
+    try {
+        const [mappingRes, capacityRes, resourceRes, orderRes] = await Promise.all([
+            fetch('/api/product_line_mapping'),
+            fetch('/api/capacity_standards'),
+            fetch('/api/line_config'),
+            fetch('/api/resource_manage')
+        ]);
+        
+        document.getElementById('stat-mapping').textContent = (await mappingRes.json()).length || 0;
+        document.getElementById('stat-capacity').textContent = (await capacityRes.json()).length || 0;
+        document.getElementById('stat-resources').textContent = (await resourceRes.json()).length || 0;
+        
+        // 获取订单数量
+        const orderResp = await fetch('/manage');
+        document.getElementById('stat-orders').textContent = '-';
+    } catch(e) {
+        console.error('Load dashboard error:', e);
+    }
+}
+
+// 检查API状态
+async function checkAPIStatus() {
+    try {
+        const [mesRes, sapRes] = await Promise.all([
+            fetch('/api/mes/test'),
+            fetch('/api/sap/test')
+        ]);
+        
+        const mesData = await mesRes.json();
+        const sapData = await sapRes.json();
+        
+        document.getElementById('mes-status').className = mesData.success ? 'badge bg-success' : 'badge bg-danger';
+        document.getElementById('mes-status').textContent = mesData.success ? '●' : '●';
+        document.getElementById('mes-url').textContent = mesData.success ? '已连接' : '未连接';
+        
+        document.getElementById('sap-status').className = sapData.success ? 'badge bg-success' : 'badge bg-danger';
+        document.getElementById('sap-status').textContent = sapData.success ? '●' : '●';
+        document.getElementById('sap-url').textContent = sapData.success ? '已连接' : '未连接';
+    } catch(e) {
+        console.error('API status error:', e);
+    }
+}
+
+// 加载产品-产线配置
+async function loadMappings() {
+    try {
+        const res = await fetch('/api/product_line_mapping');
+        currentMappings = await res.json();
+        
+        // 填充筛选下拉框
+        const companies = [...new Set(currentMappings.map(m => m.company_code))];
+        const groups = [...new Set(currentMappings.map(m => m.material_group))];
+        
+        const companySelect = document.getElementById('filter-company');
+        const groupSelect = document.getElementById('filter-material-group');
+        
+        companies.forEach(c => {
+            if(c) companySelect.add(new Option(c, c));
+        });
+        groups.forEach(g => {
+            if(g) groupSelect.add(new Option(g, g));
+        });
+        
+        filterMappings();
+    } catch(e) {
+        console.error('Load mappings error:', e);
+    }
+}
+
+function filterMappings() {
+    const company = document.getElementById('filter-company').value;
+    const group = document.getElementById('filter-material-group').value;
+    const type = document.getElementById('filter-line-type').value;
+    
+    let filtered = currentMappings;
+    if(company) filtered = filtered.filter(m => m.company_code == company);
+    if(group) filtered = filtered.filter(m => m.material_group == group);
+    if(type) filtered = filtered.filter(m => m.line_type == type);
+    
+    const tbody = document.getElementById('mappingTableBody');
+    tbody.innerHTML = filtered.map(m => `
+        <tr>
+            <td>${m.company_code || '-'}</td>
+            <td>${m.material_group || '-'}</td>
+            <td>${m.range_condition || '-'}</td>
+            <td>${m.notes || '-'}</td>
+            <td><span class="badge ${m.line_type == 'SMT' ? 'bg-primary' : 'bg-warning'}">${m.line_type || '-'}</span></td>
+            <td>
+                <button class="btn btn-sm btn-outline-primary btn-action" onclick="editMapping(${m.id})"><i class="fas fa-edit"></i></button>
+                <button class="btn btn-sm btn-outline-danger btn-action" onclick="deleteMapping(${m.id})"><i class="fas fa-trash"></i></button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function openMappingModal(id = null) {
+    document.getElementById('mappingForm').reset();
+    document.getElementById('mappingId').value = id || '';
+    
+    if(id) {
+        const m = currentMappings.find(x => x.id == id);
+        if(m) {
+            document.getElementById('mappingCompany').value = m.company_code || '1010';
+            document.getElementById('mappingMaterialGroup').value = m.material_group || '';
+            document.getElementById('mappingRange').value = m.range_condition || '';
+            document.getElementById('mappingLines').value = m.notes || '';
+            document.getElementById('mappingType').value = m.line_type || 'SMT';
+        }
+    }
+    
+    new bootstrap.Modal(document.getElementById('mappingModal')).show();
+}
+
+async function saveMapping() {
+    const id = document.getElementById('mappingId').value;
+    const lines = document.getElementById('mappingLines').value.split(',').map(l => l.trim());
+    
+    const data = {
+        company_code: document.getElementById('mappingCompany').value,
+        material_group: document.getElementById('mappingMaterialGroup').value,
+        range_condition: document.getElementById('mappingRange').value,
+        line_id_1: lines[0] || null,
+        line_id_2: lines[1] || null,
+        line_id_3: lines[2] || null,
+        line_id_4: lines[3] || null,
+        line_id_5: lines[4] || null,
+        line_type: document.getElementById('mappingType').value,
+        notes: document.getElementById('mappingLines').value
+    };
+    
+    try {
+        const method = id ? 'PUT' : 'POST';
+        const url = id ? `/api/product_line_mapping/${id}` : '/api/product_line_mapping';
+        
+        const res = await fetch(url, {
+            method: method,
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+        
+        if((await res.json()).success) {
+            bootstrap.Modal.getInstance(document.getElementById('mappingModal')).hide();
+            loadMappings();
+            loadDashboard();
+        }
+    } catch(e) {
+        alert('保存失败: ' + e);
+    }
+}
+
+async function deleteMapping(id) {
+    if(!confirm('确定删除?')) return;
+    
+    try {
+        await fetch(`/api/product_line_mapping/${id}`, {method: 'DELETE'});
+        loadMappings();
+        loadDashboard();
+    } catch(e) {
+        alert('删除失败: ' + e);
+    }
+}
+
+function editMapping(id) {
+    openMappingModal(id);
+}
+
+// 加载标产数据
+async function loadCapacities() {
+    try {
+        const res = await fetch('/api/capacity_standards');
+        currentCapacities = await res.json();
+        
+        const tbody = document.getElementById('capacityTableBody');
+        tbody.innerHTML = currentCapacities.map(c => `
+            <tr>
+                <td>${c.line_id}</td>
+                <td>${c.line_name || '-'}</td>
+                <td>${c.capacity_type || '-'}</td>
+                <td>${c.std_capacity || 0}</td>
+                <td>${c.std_time || 0}</td>
+                <td><span class="badge bg-info">${c.source}</span></td>
+                <td>${c.effective_date || '-'}</td>
+                <td>
+                    <button class="btn btn-sm btn-outline-danger btn-action" onclick="deleteCapacity(${c.id})"><i class="fas fa-trash"></i></button>
+                </td>
+            </tr>
+        `).join('');
+    } catch(e) {
+        console.error('Load capacities error:', e);
+    }
+}
+
+async function deleteCapacity(id) {
+    if(!confirm('确定删除?')) return;
+    // TODO: 实现删除API
+    alert('功能开发中');
+}
+
+// 加载产线资源
+async function loadResources() {
+    try {
+        const res = await fetch('/api/resource_manage');
+        currentResources = await res.json();
+        
+        const tbody = document.getElementById('resourceTableBody');
+        tbody.innerHTML = currentResources.map(r => `
+            <tr>
+                <td>${r.id}</td>
+                <td>${r.name}</td>
+                <td><span class="badge ${r.type == 'SMT' ? 'bg-primary' : 'bg-success'}">${r.type}</span></td>
+                <td>${r.company_code || '-'}</td>
+                <td>${r.work_hours || 24}</td>
+                <td>${r.capacity_ratio || 1}</td>
+                <td>${r.description || '-'}</td>
+                <td>
+                    <button class="btn btn-sm btn-outline-primary btn-action"><i class="fas fa-edit"></i></button>
+                </td>
+            </tr>
+        `).join('');
+    } catch(e) {
+        console.error('Load resources error:', e);
+    }
+}
+
+// 同步功能
+async function importFromExcel() {
+    try {
+        const res = await fetch('/api/sync/product_line_mapping', {method: 'POST'});
+        const data = await res.json();
+        
+        if(data.success) {
+            alert('导入成功: ' + data.message);
+            loadMappings();
+            loadDashboard();
+        } else {
+            alert('导入失败: ' + data.message);
+        }
+    } catch(e) {
+        alert('导入失败: ' + e);
+    }
+}
+
+async function syncAllData() {
+    try {
+        const res = await fetch('/api/sync/import_all', {method: 'POST'});
+        const data = await res.json();
+        
+        if(data.success) {
+            alert('同步成功: ' + data.message);
+            loadDashboard();
+        } else {
+            alert('同步失败: ' + data.message);
+        }
+    } catch(e) {
+        alert('同步失败: ' + e);
+    }
+}
+
+async function syncFromMES() {
+    try {
+        const res = await fetch('/api/sync/mes_capacity', {method: 'POST'});
+        const data = await res.json();
+        
+        if(data.success) {
+            alert('同步成功: ' + (data.synced_count || 0) + ' 条');
+            loadCapacities();
+            loadDashboard();
+        }
+    } catch(e) {
+        alert('同步失败: ' + e);
+    }
+}
+
+async function syncFromSAP() {
+    try {
+        const res = await fetch('/api/sync/sap_orders', {method: 'POST'});
+        const data = await res.json();
+        
+        if(data.success) {
+            alert('同步成功: ' + (data.count || 0) + ' 条订单');
+            loadDashboard();
+        }
+    } catch(e) {
+        alert('同步失败: ' + e);
+    }
+}
+
+function openResourceModal() {
+    alert('功能开发中');
+}
+
+function openCapacityModal() {
+    alert('功能开发中');
+}
+
+function importCapacityFromExcel() {
+    alert('功能开发中');
+}
+
+function syncCapacity() {
+    syncFromMES();
+}
+</script>
+
+</body>
+</html>

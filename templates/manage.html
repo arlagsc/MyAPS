@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>数据管理中心</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏭</text></svg>">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .table-input { font-size: 0.8rem; padding: 2px 5px; }
+        .time-warning { font-size: 0.7rem; color: #dc3545; display: none; margin-top: 2px; }
+        .row-unsaved { background-color: #fff3cd !important; transition: background-color 0.3s; }
+        .row-saved { animation: fadeGreen 1.5s; }
+        @keyframes fadeGreen { 0% { background-color: #d1e7dd; } 100% { background-color: transparent; } }
+        
+        #loadingOverlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255,255,255,0.8); z-index: 9999; display: none;
+            justify-content: center; align-items: center; flex-direction: column;
+        }
+    </style>
+</head>
+<body class="p-4 bg-light">
+    
+    <div id="loadingOverlay">
+        <div class="spinner-border text-primary" role="status"></div>
+        <div class="mt-2 fw-bold text-primary">正在计算时间约束与排产...</div>
+    </div>
+
+    <div class="d-flex justify-content-between mb-4 align-items-center">
+        <h3>🏭 订单管理中心</h3>
+        <div class="btn-group">
+            <button onclick="runSchedule('OFFICIAL')" class="btn btn-primary btn-sm"><i class="fas fa-play"></i> 正式排产</button>
+            <button onclick="runSchedule('SIMULATION')" class="btn btn-warning btn-sm"><i class="fas fa-flask"></i> 模拟排产</button>
+        </div>
+        <div>
+            <a href="/" class="btn btn-outline-secondary btn-sm"><i class="fas fa-chart-gantt"></i> 看板</a>
+            <a href="/resources" class="btn btn-outline-dark btn-sm">⚙️ 产线配置</a>
+            <form action="/manage/reset" method="POST" class="d-inline" onsubmit="return confirm('警告：这将清空所有数据！')">
+                <button class="btn btn-danger btn-sm"><i class="fas fa-trash"></i> 重置系统</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-3">
+            <div class="card p-3 shadow-sm sticky-top" style="top: 20px;">
+                <h6 class="card-title text-primary"><i class="fas fa-plus-circle"></i> 录入新订单</h6>
+                <form action="/manage/add" method="POST">
+                    <div class="form-check form-switch mb-2 bg-warning bg-opacity-10 p-2 rounded">
+                        <input class="form-check-input ms-0" type="checkbox" name="is_sim" value="1" id="new_is_sim">
+                        <label class="form-check-label ms-2 small fw-bold" for="new_is_sim">模拟订单</label>
+                    </div>
+
+                    <div class="mb-2">
+                        <input name="task_id" class="form-control form-control-sm" placeholder="任务ID" required aria-label="任务ID">
+                    </div>
+                    <div class="mb-2">
+                        <input name="job_id" class="form-control form-control-sm" placeholder="JobID" required aria-label="JobID">
+                    </div>
+                    
+                    <div class="mb-2">
+                        <select name="product_code" class="form-select form-select-sm" aria-label="产品类型">
+                            <option value="TV-32">TV-32 (32寸)</option>
+                            <option value="TV-75">TV-75 (75寸)</option>
+                            <option value="PCBA-Simple">PCBA (普通)</option>
+                            <option value="PCBA-Complex">PCBA (复杂)</option>
+                        </select>
+                    </div>
+                    <div class="mb-2">
+                        <select name="resource_id" class="form-select form-select-sm fw-bold text-primary" aria-label="分配资源">
+                            <option value="AUTO" selected>✨ 自动匹配能力</option>
+                            <option disabled>--- 手动指定 ---</option>
+                            {% for r in resources %}
+                            <option value="{{r.id}}">{{r.name}}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="mb-2">
+                        <div class="row g-1">
+                            <div class="col-6">
+                                <select name="process_req" class="form-select form-select-sm" aria-label="工艺要求">
+                                    <option value="NORMAL">标准工艺</option>
+                                    <option value="DIP_REQUIRED">需DIP插件</option>
+                                </select>
+                            </div>
+                            <div class="col-6">
+                                <select name="smt_side" class="form-select form-select-sm" aria-label="SMT面">
+                                    <option value="">无SMT</option>
+                                    <option value="A">SMT A面</option>
+                                    <option value="B">SMT B面</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-2 bg-light p-2 rounded border">
+                        <label class="small fw-bold text-muted d-block mb-1" for="new_material_time">📦 物料到齐时间</label>
+                        <input name="material_time" id="new_material_time" type="datetime-local" class="form-control form-control-sm">
+                        
+                        <label class="small fw-bold text-muted d-block mt-2 mb-1" for="new_software_time">💾 软件Ready时间</label>
+                        <input name="software_time" id="new_software_time" type="datetime-local" class="form-control form-control-sm">
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="small text-muted" for="new_deadline">Deadline</label>
+                        <input name="deadline" id="new_deadline" type="datetime-local" class="form-control form-control-sm">
+                    </div>
+
+                    <div class="mb-2">
+                        <input name="std_time" type="number" class="form-control form-control-sm" value="60" placeholder="工时(分)" required aria-label="标准工时">
+                    </div>
+                    <button class="btn btn-primary btn-sm w-100 mt-2">保存订单</button>
+                    <input type="hidden" name="qty" value="100">
+                    <input type="hidden" name="priority" value="5">
+                </form>
+            </div>
+        </div>
+
+        <div class="col-md-9">
+            <div class="card shadow-sm">
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm align-middle mb-0" style="font-size:0.8rem">
+                        <thead class="table-light">
+                            <tr>
+                                <th width="5%">类型</th>
+                                <th width="20%">任务ID</th>
+                                <th width="15%">物料/软件时间</th> 
+                                <th width="15%">分配线体</th>
+                                <th width="15%">计划开始</th>
+                                <th width="15%">计划结束</th>
+                                <th width="15%" class="text-end">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for o in orders %}
+                            <tr id="row-{{o.task_id}}" data-std-time="{{o.std_time}}" class="data-row {{ 'table-warning' if o.plan_type=='SIMULATION' else '' }}">
+                                <td>{{ '模拟' if o.plan_type=='SIMULATION' else '正式' }}</td>
+                                <td>
+                                    <strong>{{o.task_id}}</strong><br>
+                                    <span class="text-muted small">{{o.product_code}}</span>
+                                </td>
+                                
+                                <td>
+                                    <div class="small" title="物料时间">
+                                        📦 {{ o.material_time[5:] if o.material_time else '-' }}
+                                    </div>
+                                    <div class="small" title="软件时间">
+                                        💾 {{ o.software_time[5:] if o.software_time else '-' }}
+                                    </div>
+                                </td>
+                                
+                                <td>
+                                    <select class="form-select form-select-sm table-input resource-select" 
+                                            style="width: 100%;" 
+                                            id="res_select_{{o.task_id}}"
+                                            name="res_select_{{o.task_id}}"
+                                            aria-label="选择线体"
+                                            onchange="markUnsaved('{{o.task_id}}')">
+                                        <option value="AUTO" class="fw-bold" {{ 'selected' if o.resource_id == 'AUTO' else '' }}>✨ 自动</option>
+                                        <option disabled>---------</option>
+                                        {% for r in resources %}
+                                            <option value="{{r.id}}" {{ 'selected' if o.resource_id == r.id else '' }}>{{r.name}}</option>
+                                        {% endfor %}
+                                    </select>
+                                    {% if '等料' in o.status %}
+                                        <span class="badge bg-warning text-dark" style="font-size:0.6em">⏳ 等料</span>
+                                    {% elif '等软件' in o.status %}
+                                        <span class="badge bg-info text-dark" style="font-size:0.6em">⏳ 等软件</span>
+                                    {% endif %}
+                                </td>
+                                
+                                <td>
+                                    <input type="datetime-local" class="form-control form-control-sm table-input start-time" 
+                                           style="width: 100%;"
+                                           id="start_time_{{o.task_id}}"
+                                           name="start_time_{{o.task_id}}"
+                                           aria-label="计划开始时间"
+                                           value="{{ o.planned_start.replace(' ', 'T') if o.planned_start else '' }}"
+                                           onchange="onStartTimeChange('{{o.task_id}}')">
+                                </td>
+                                <td>
+                                    <input type="datetime-local" class="form-control form-control-sm table-input end-time" 
+                                           style="width: 100%;"
+                                           id="end_time_{{o.task_id}}"
+                                           name="end_time_{{o.task_id}}"
+                                           aria-label="计划结束时间"
+                                           value="{{ o.planned_end.replace(' ', 'T') if o.planned_end else '' }}"
+                                           oninput="validateTime('{{o.task_id}}'); markUnsaved('{{o.task_id}}')">
+                                    <div class="time-warning" id="warn-{{o.task_id}}">
+                                        <i class="fas fa-exclamation-triangle"></i> 时间不足
+                                    </div>
+                                </td>
+
+                                <td class="text-end">
+                                    <div class="d-flex align-items-center justify-content-end gap-2">
+                                        <div class="form-check form-switch m-0" title="锁定任务">
+                                            <input class="form-check-input lock-check" type="checkbox" id="lock_{{o.task_id}}" 
+                                                   {{ 'checked' if o.is_locked else '' }}
+                                                   onchange="markUnsaved('{{o.task_id}}')">
+                                            <label class="form-check-label small text-secondary" for="lock_{{o.task_id}}" style="cursor: pointer;">锁定</label>
+                                        </div>
+                                        <button class="btn btn-link btn-sm p-0 text-decoration-none btn-save" 
+                                                id="btn-save-{{o.task_id}}"
+                                                onclick="saveRow('{{o.task_id}}')" 
+                                                title="保存">
+                                            💾 保存
+                                        </button>
+                                        <span class="save-status small ms-1 text-danger fw-bold" id="status-{{o.task_id}}" style="opacity:0; display:none;">⚠️</span>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function formatDateTimeLocal(date) {
+            const pad = (n) => n < 10 ? '0' + n : n;
+            return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate()) + 'T' + pad(date.getHours()) + ':' + pad(date.getMinutes());
+        }
+        function onStartTimeChange(taskId) {
+            const row = document.getElementById('row-' + taskId);
+            const startInput = row.querySelector('.start-time');
+            const endInput = row.querySelector('.end-time');
+            const stdTime = parseInt(row.getAttribute('data-std-time')) || 0;
+            if (!startInput.value) return;
+            const startDate = new Date(startInput.value);
+            const endDate = new Date(startDate.getTime() + stdTime * 60000);
+            endInput.value = formatDateTimeLocal(endDate);
+            validateTime(taskId);
+            markUnsaved(taskId);
+        }
+        function validateTime(taskId) {
+            const row = document.getElementById('row-' + taskId);
+            const startInput = row.querySelector('.start-time');
+            const endInput = row.querySelector('.end-time');
+            const warnDiv = document.getElementById('warn-' + taskId);
+            const stdTime = parseInt(row.getAttribute('data-std-time')) || 0;
+            if (!startInput.value || !endInput.value) { warnDiv.style.display = 'none'; return; }
+            const diff = (new Date(endInput.value) - new Date(startInput.value)) / 60000;
+            if (diff < stdTime) { warnDiv.style.display = 'block'; endInput.classList.add('is-invalid'); }
+            else { warnDiv.style.display = 'none'; endInput.classList.remove('is-invalid'); }
+        }
+        function markUnsaved(taskId) {
+            const row = document.getElementById('row-' + taskId);
+            const statusSpan = document.getElementById('status-' + taskId);
+            const saveBtn = document.getElementById('btn-save-' + taskId);
+            row.classList.add('row-unsaved');
+            statusSpan.style.display = "inline"; statusSpan.style.opacity = "1";
+            saveBtn.innerHTML = "💾 保存*";
+        }
+        function saveRow(taskId) {
+            const row = document.getElementById('row-' + taskId);
+            const payload = {
+                task_id: taskId,
+                planned_start: row.querySelector('.start-time').value,
+                planned_end: row.querySelector('.end-time').value,
+                is_locked: row.querySelector('.lock-check').checked ? 1 : 0,
+                resource_id: row.querySelector('.resource-select').value
+            };
+            const saveBtn = document.getElementById('btn-save-' + taskId);
+            saveBtn.disabled = true; saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            fetch('/api/update_order_manual', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) })
+            .then(r=>r.json()).then(d=>{
+                saveBtn.disabled = false;
+                if(d.success){
+                    row.classList.remove('row-unsaved'); row.classList.add('row-saved');
+                    saveBtn.innerHTML = "💾 保存";
+                    document.getElementById('status-'+taskId).style.opacity="0";
+                    setTimeout(()=>row.classList.remove('row-saved'),1500);
+                } else { alert(d.message); saveBtn.innerHTML = "💾 重试"; }
+            });
+        }
+        function runSchedule(mode) {
+            document.getElementById('loadingOverlay').style.display = 'flex';
+            fetch('/api/run', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({mode: mode}) })
+            .then(r=>r.json()).then(d=>{ alert(d.message); location.reload(); });
+        }
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('tr[id^="row-"]').forEach(r => validateTime(r.id.replace('row-', '')));
+        });
+    </script>
+</body>
+</html>
