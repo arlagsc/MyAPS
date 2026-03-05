@@ -742,6 +742,21 @@ def config_page():
     return render_template('config.html')
 
 # 2. 数据管理 API
+
+# 车间看板
+@app.route('/dashboard/<workshop>')
+def dashboard_workshop(workshop):
+    workshop_map = {
+        'smt': {'code': 'SMT', 'name': 'SMT车间'},
+        'dip': {'code': 'DIP', 'name': 'DIP车间'},
+        'assembly': {'code': 'ASSEMBLY', 'name': '总装车间'}
+    }
+    if workshop not in workshop_map:
+        return 'Not Found', 404
+    return render_template('dashboard_workshop.html', 
+                          workshop_code=workshop_map[workshop]['code'],
+                          workshop_name=workshop_map[workshop]['name'])
+
 @app.route('/api/resource_manage', methods=['GET', 'POST', 'DELETE'])
 def resource_manage():
     conn = get_db_connection()
