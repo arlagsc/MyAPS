@@ -41,7 +41,7 @@ async function loadMESOrders() {
                 var statusClass = o.status === 'Completed' ? 'success' : (o.status === 'In Progress' ? 'primary' : 'warning');
                 tableHtml += '<tr>';
                 tableHtml += '<td>' + o.task_id + '</td>';
-                tableHtml += '<td>' + o.parent_order + '</td>';
+                tableHtml += '<td>' + (o.parent_order || o.job_id || '-') + '</td>';
                 tableHtml += '<td>' + o.product_code + '</td>';
                 tableHtml += '<td>' + o.priority + '</td>';
                 tableHtml += '<td>' + o.total_qty + '</td>';
@@ -461,7 +461,7 @@ async function loadMESOrders() {
                 var statusClass = o.status === 'Completed' ? 'success' : (o.status === 'In Progress' ? 'primary' : 'warning');
                 tableHtml += '<tr>';
                 tableHtml += '<td>' + o.task_id + '</td>';
-                tableHtml += '<td>' + o.parent_order + '</td>';
+                tableHtml += '<td>' + (o.parent_order || o.job_id || '-') + '</td>';
                 tableHtml += '<td>' + o.product_code + '</td>';
                 tableHtml += '<td>' + o.priority + '</td>';
                 tableHtml += '<td>' + o.total_qty + '</td>';
@@ -696,7 +696,7 @@ async function loadMESOrders() {
                 var statusClass = o.status === 'Completed' ? 'success' : (o.status === 'In Progress' ? 'primary' : 'warning');
                 tableHtml += '<tr>';
                 tableHtml += '<td>' + o.task_id + '</td>';
-                tableHtml += '<td>' + o.parent_order + '</td>';
+                tableHtml += '<td>' + (o.parent_order || o.job_id || '-') + '</td>';
                 tableHtml += '<td>' + o.product_code + '</td>';
                 tableHtml += '<td>' + o.priority + '</td>';
                 tableHtml += '<td>' + o.total_qty + '</td>';
