@@ -33,6 +33,24 @@ async function loadMESOrders() {
             }
             
             document.getElementById('pendingOrdersList').innerHTML = html;
+            
+            // Also populate the table (工单详情)
+            var tableHtml = '';
+            for (var i = 0; i < data.data.length; i++) {
+                var o = data.data[i];
+                var statusClass = o.status === 'Completed' ? 'success' : (o.status === 'In Progress' ? 'primary' : 'warning');
+                tableHtml += '<tr>';
+                tableHtml += '<td>' + o.task_id + '</td>';
+                tableHtml += '<td>' + o.parent_order + '</td>';
+                tableHtml += '<td>' + o.product_code + '</td>';
+                tableHtml += '<td>' + o.priority + '</td>';
+                tableHtml += '<td>' + o.total_qty + '</td>';
+                tableHtml += '<td><span class="badge bg-' + statusClass + '">' + o.status + '</span></td>';
+                tableHtml += '<td>' + o.remaining_qty + '</td>';
+                tableHtml += '<td>' + o.progress + '%</td>';
+                tableHtml += '</tr>';
+            }
+            document.getElementById('ordersTableBody').innerHTML = tableHtml;
         }
     } catch(e) {
         console.log('MES not available');
@@ -389,6 +407,7 @@ async function loadMESOrders() {
                         <thead>
                             <tr>
                                 <th>工单号</th>
+                                <th>订单号</th>
                                 <th>产品</th>
                                 <th>数量</th>
                                 <th>优先级</th>
@@ -434,6 +453,24 @@ async function loadMESOrders() {
             }
             
             document.getElementById('pendingOrdersList').innerHTML = html;
+            
+            // Also populate the table (工单详情)
+            var tableHtml = '';
+            for (var i = 0; i < data.data.length; i++) {
+                var o = data.data[i];
+                var statusClass = o.status === 'Completed' ? 'success' : (o.status === 'In Progress' ? 'primary' : 'warning');
+                tableHtml += '<tr>';
+                tableHtml += '<td>' + o.task_id + '</td>';
+                tableHtml += '<td>' + o.parent_order + '</td>';
+                tableHtml += '<td>' + o.product_code + '</td>';
+                tableHtml += '<td>' + o.priority + '</td>';
+                tableHtml += '<td>' + o.total_qty + '</td>';
+                tableHtml += '<td><span class="badge bg-' + statusClass + '">' + o.status + '</span></td>';
+                tableHtml += '<td>' + o.remaining_qty + '</td>';
+                tableHtml += '<td>' + o.progress + '%</td>';
+                tableHtml += '</tr>';
+            }
+            document.getElementById('ordersTableBody').innerHTML = tableHtml;
         }
     } catch(e) {
         console.log('MES not available');
@@ -651,6 +688,24 @@ async function loadMESOrders() {
             }
             
             document.getElementById('pendingOrdersList').innerHTML = html;
+            
+            // Also populate the table (工单详情)
+            var tableHtml = '';
+            for (var i = 0; i < data.data.length; i++) {
+                var o = data.data[i];
+                var statusClass = o.status === 'Completed' ? 'success' : (o.status === 'In Progress' ? 'primary' : 'warning');
+                tableHtml += '<tr>';
+                tableHtml += '<td>' + o.task_id + '</td>';
+                tableHtml += '<td>' + o.parent_order + '</td>';
+                tableHtml += '<td>' + o.product_code + '</td>';
+                tableHtml += '<td>' + o.priority + '</td>';
+                tableHtml += '<td>' + o.total_qty + '</td>';
+                tableHtml += '<td><span class="badge bg-' + statusClass + '">' + o.status + '</span></td>';
+                tableHtml += '<td>' + o.remaining_qty + '</td>';
+                tableHtml += '<td>' + o.progress + '%</td>';
+                tableHtml += '</tr>';
+            }
+            document.getElementById('ordersTableBody').innerHTML = tableHtml;
         }
     } catch(e) {
         console.log('MES not available');
