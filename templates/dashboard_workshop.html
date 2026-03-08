@@ -23,10 +23,11 @@ async function loadMESOrders() {
                 
                 html += '<div class="work-order-item">';
                 html += '<div class="d-flex justify-content-between">';
-                html += '<span class="wo-id">' + o.parent_order + '</span>';
+                html += '<span class="wo-id">' + o.task_id + '</span>';
                 html += '<span class="badge bg-' + pclass + '">' + o.progress + '%</span>';
                 html += '</div>';
                 html += '<div class="wo-product mt-1">' + o.component_desc + '</div>';
+                html += '<div class="text-muted small" style="font-size:11px;">订单: ' + o.parent_order + '</div>';
                 html += '<div class="text-muted small">编码:' + o.component_code + ' | 总量:' + o.total_qty + ' | 剩余:' + o.remaining_qty + '</div>';
                 html += '</div>';
             }
@@ -423,10 +424,11 @@ async function loadMESOrders() {
                 
                 html += '<div class="work-order-item">';
                 html += '<div class="d-flex justify-content-between">';
-                html += '<span class="wo-id">' + o.parent_order + '</span>';
+                html += '<span class="wo-id">' + o.task_id + '</span>';
                 html += '<span class="badge bg-' + pclass + '">' + o.progress + '%</span>';
                 html += '</div>';
                 html += '<div class="wo-product mt-1">' + o.component_desc + '</div>';
+                html += '<div class="text-muted small" style="font-size:11px;">订单: ' + o.parent_order + '</div>';
                 html += '<div class="text-muted small">编码:' + o.component_code + ' | 总量:' + o.total_qty + ' | 剩余:' + o.remaining_qty + '</div>';
                 html += '</div>';
             }
@@ -639,10 +641,11 @@ async function loadMESOrders() {
                 
                 html += '<div class="work-order-item">';
                 html += '<div class="d-flex justify-content-between">';
-                html += '<span class="wo-id">' + o.parent_order + '</span>';
+                html += '<span class="wo-id">' + o.task_id + '</span>';
                 html += '<span class="badge bg-' + pclass + '">' + o.progress + '%</span>';
                 html += '</div>';
                 html += '<div class="wo-product mt-1">' + o.component_desc + '</div>';
+                html += '<div class="text-muted small" style="font-size:11px;">订单: ' + o.parent_order + '</div>';
                 html += '<div class="text-muted small">编码:' + o.component_code + ' | 总量:' + o.total_qty + ' | 剩余:' + o.remaining_qty + '</div>';
                 html += '</div>';
             }

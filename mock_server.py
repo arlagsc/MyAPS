@@ -247,6 +247,74 @@ def get_batch_orders():
     })
 
 
+
+# Component info mapping
+COMPONENT_INFO = {
+    "TV-32": {"code": "C32-001", "desc": "32寸LED液晶面板"},
+    "TV-40": {"code": "C40-001", "desc": "40寸LED液晶面板"},
+    "TV-55": {"code": "C55-001", "desc": "55寸LED液晶面板"},
+    "TV-65": {"code": "C65-001", "desc": "65寸LED液晶面板"},
+    "PCBA-Simple": {"code": "PCBA-SIM", "desc": "简易PCBA主板"},
+}
+
+@app.route("/api/mes/orders", methods=["GET"])
+def get_mes_orders_api():
+    workshop = request.args.get("workshop", "ALL")
+    orders = []
+    parent_orders = [f"PO-SMT-{i:03d}" for i in range(1, 21)]
+    parent_orders += [f"PO-DIP-{i:03d}" for i in range(1, 11)]
+    parent_orders += [f"PO-ASM-{i:03d}" for i in range(1, 11)]
+    
+    for parent_order in parent_orders:
+        if "SMT" in parent_order:
+            ws, products = "SMT", ["TV-32", "TV-40", "TV-55", "TV-65"]
+        elif "DIP" in parent_order:
+            ws, products = "DIP", ["TV-42", "TV-50", "PCBA-Simple"]
+        else:
+            ws, products = "ASSEMBLY", ["TV-55", "TV-65", "TV-75"]
+        
+        if workshop != "ALL" and ws != workshop:
+            continue
+        
+        product = random.choice(products)
+        total_qty = random.randint(100, 500)
+        completed_qty = random.randint(0, total_qty)
+        comp = COMPONENT_INFO.get(product, {"code": "C-UNK", "desc": "未知组件"})
+        
+        orders.append({
+            "task_id": f"WO-{ws[:3]}-{parent_order.split('-')[1]}-{int(parent_order.split('-')[2]):03d}",
+            "parent_order": parent_order, "workshop": ws,
+            "job_id": f"JOB-{parent_order.split('-')[1]}{parent_order.split('-')[2]}",
+            "component_code": comp["code"], "component_desc": comp["desc"],
+            "product_code": product, "total_qty": total_qty,
+            "completed_qty": completed_qty, "remaining_qty": total_qty - completed_qty,
+            "status": "Completed" if completed_qty >= total_qty else "In Progress" if completed_qty > 0 else "Pending",
+            "progress": int(completed_qty / total_qty * 100),
+        })
+    
+    return jsonify({"success": True, "count": len(orders), "data": orders})
+
+
+@app.route("/api/mes/orders/<parent_order>", methods=["GET"])
+def get_mes_order_detail_api(parent_order):
+    orders = []
+    for i in range(random.randint(2, 5)):
+        product = random.choice(["TV-32", "TV-40", "TV-55", "TV-65"])
+        total_qty = random.randint(50, 200)
+        completed_qty = random.randint(0, total_qty)
+        comp = COMPONENT_INFO.get(product, {"code": "C-UNK", "desc": "未知组件"})
+        
+        orders.append({
+            "parent_order": parent_order, "work_order": f"WO-{parent_order}-{i+1:02d}",
+            "component_code": comp["code"], "component_desc": comp["desc"],
+            "total_qty": total_qty, "completed_qty": completed_qty,
+            "remaining_qty": total_qty - completed_qty,
+            "status": "Completed" if completed_qty >= total_qty else "In Progress" if completed_qty > 0 else "Pending",
+        })
+    
+    return jsonify({"success": True, "parent_order": parent_order, "data": orders})
+
+
 if __name__ == '__main__':
     print("=" * 50)
     print("  模拟 MES/SAP 服务器")
