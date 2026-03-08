@@ -765,7 +765,7 @@ async function resetSystem(btn) {
     
     // Use XMLHttpRequest for more control
     var xhr = new XMLHttpRequest();
-    xhr.open('POST', '/manage/reset', true);
+    xhr.open('POST', '/manage/reset?t=' + new Date().getTime(), true);
     xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
     
     xhr.onload = function() {
