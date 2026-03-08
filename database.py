@@ -100,6 +100,9 @@ def init_db():
                 plan_type TEXT DEFAULT 'OFFICIAL',
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                workshop TEXT,
+                component_code TEXT,
+                component_desc TEXT,
                 FOREIGN KEY (product_code) REFERENCES products(product_code)
             )
         ''')
