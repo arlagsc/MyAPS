@@ -282,9 +282,9 @@ def get_mes_orders_api():
         comp = COMPONENT_INFO.get(product, {"code": "C-UNK", "desc": "未知组件"})
         
         orders.append({
-            "task_id": f"WO-{ws[:3]}-{parent_order.split('-')[1]}-{int(parent_order.split('-')[2]):03d}",
+            "task_id": f"WO-{ws[:3]}-{int(parent_order.split('-')[2]):03d}",
             "parent_order": parent_order, "workshop": ws,
-            "job_id": f"JOB-{parent_order.split('-')[1]}{parent_order.split('-')[2]}",
+            "job_id": f"JOB-{parent_order.split('-')[1]}-{parent_order.split('-')[2]}",
             "component_code": comp["code"], "component_desc": comp["desc"],
             "product_code": product, "total_qty": total_qty,
             "completed_qty": completed_qty, "remaining_qty": total_qty - completed_qty,
