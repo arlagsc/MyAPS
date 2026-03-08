@@ -754,11 +754,29 @@ async function resetSystem() {
         return;
     }
     
+    // Show loading indicator
+    const btn = event.target;
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 正在同步SAP...';
+    btn.disabled = true;
+    
     try {
         const res = await fetch('/manage/reset', {method: 'POST'});
-        alert('重置成功！请查看同步结果');
-        loadDashboard();
+        
+        // Hide loading
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+        
+        // Reload all data
+        await loadDashboard();
+        await loadMappings();
+        await loadCapacities();
+        await loadResources();
+        
+        alert('重置成功！数据已从SAP同步并刷新显示');
     } catch(e) {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
         alert('重置失败: ' + e);
     }
 }
