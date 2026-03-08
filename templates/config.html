@@ -754,33 +754,50 @@ async function resetSystem(btn) {
         return;
     }
     
+    // Prevent any default form submission
+    event.preventDefault();
+    event.stopPropagation();
+    
     // Show loading indicator
     const originalText = btn.innerHTML;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 正在同步SAP...';
     btn.disabled = true;
     
-    fetch('/manage/reset', {method: 'POST'})
-        .then(function(res) {
-            return res.json();
-        })
-        .then(function(data) {
-            // Hide loading
-            btn.innerHTML = originalText;
-            btn.disabled = false;
-            
-            // Reload all data
-            loadDashboard();
-            loadMappings();
-            loadCapacities();
-            loadResources();
-            
-            alert('重置成功！已同步 ' + data.count + ' 条订单');
-        })
-        .catch(function(e) {
-            btn.innerHTML = originalText;
-            btn.disabled = false;
-            alert('重置失败: ' + e);
-        });
+    // Use XMLHttpRequest for more control
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', '/manage/reset', true);
+    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+    
+    xhr.onload = function() {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+        
+        if(xhr.status === 200) {
+            try {
+                var data = JSON.parse(xhr.responseText);
+                
+                // Reload all data
+                loadDashboard();
+                loadMappings();
+                loadCapacities();
+                loadResources();
+                
+                alert('重置成功！已同步 ' + data.count + ' 条订单');
+            } catch(e) {
+                alert('解析响应失败: ' + e);
+            }
+        } else {
+            alert('请求失败: ' + xhr.status);
+        }
+    };
+    
+    xhr.onerror = function() {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+        alert('网络错误');
+    };
+    
+    xhr.send('');
 }
 
 function openResourceModal() {
