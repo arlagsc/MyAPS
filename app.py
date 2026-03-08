@@ -736,9 +736,9 @@ def reset_data():
         except Exception as e:
             print(f'Git error: {e}')
         
-        return jsonify({'success': True, 'count': saved, 'message': '重置成功'})
+        return redirect(url_for('config_page') + '?reset=ok&count=' + str(saved))
     except Exception as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
+        return redirect(url_for('config_page') + '?reset=fail&msg=' + str(e))
 
 @app.route('/api/update_order_manual', methods=['POST'])
 def update_order_manual():
