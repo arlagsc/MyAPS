@@ -340,7 +340,7 @@
                                     <strong>警告：</strong>此操作将清空所有订单数据并从SAP重新同步！
                                 </div>
                                 <div class="d-grid gap-2 mt-3">
-                                    <button type="button" class="btn btn-danger" onclick="resetSystem(this)">
+                                    <button type="button" id="resetBtn" class="btn btn-danger" onclick="resetSystem()">
                                         <i class="fas fa-redo"></i> 重置系统
                                     </button>
                                 </div>
@@ -745,51 +745,40 @@ async function syncFromSAP() {
     }
 }
 
-async function resetSystem(btn) {
+async function resetSystem() {
     if(!confirm('确定要重置系统吗？这将清空所有订单并从SAP重新同步数据。')) {
-        return;
+        return false;
     }
     
-    // Show loading indicator
-    const originalText = btn.innerHTML;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 正在同步SAP...';
+    var btn = document.getElementById('resetBtn');
     btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 正在同步...';
     
-    // Use XMLHttpRequest for more control
-    var xhr = new XMLHttpRequest();
-    xhr.open('POST', '/manage/reset?t=' + new Date().getTime(), true);
-    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-    
-    xhr.onload = function() {
-        btn.innerHTML = originalText;
+    // Use fetch API which is more modern
+    fetch('/manage/reset', {
+        method: 'POST',
+        cache: 'no-cache'
+    })
+    .then(function(response) { return response.json(); })
+    .then(function(data) {
         btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-redo"></i> 重置系统';
         
-        if(xhr.status === 200) {
-            try {
-                var data = JSON.parse(xhr.responseText);
-                
-                // Reload all data
-                loadDashboard();
-                loadMappings();
-                loadCapacities();
-                loadResources();
-                
-                alert('重置成功！已同步 ' + data.count + ' 条订单');
-            } catch(e) {
-                alert('解析响应失败: ' + e);
-            }
-        } else {
-            alert('请求失败: ' + xhr.status);
-        }
-    };
-    
-    xhr.onerror = function() {
-        btn.innerHTML = originalText;
+        // Reload data
+        loadDashboard();
+        loadMappings();
+        loadCapacities();
+        loadResources();
+        
+        alert('重置成功！已同步 ' + data.count + ' 条订单');
+    })
+    .catch(function(error) {
         btn.disabled = false;
-        alert('网络错误');
-    };
+        btn.innerHTML = '<i class="fas fa-redo"></i> 重置系统';
+        alert('重置失败: ' + error);
+    });
     
-    xhr.send('');
+    return false;
 }
 
 function openResourceModal() {
