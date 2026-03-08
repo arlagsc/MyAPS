@@ -528,12 +528,67 @@ def sync_mes_capacity():
 @api_bp.route('/sync/sap_orders', methods=['POST'])
 def sync_sap_orders():
     """从 SAP 同步订单数据"""
+    from database import get_db_connection
+    
     sap = AdapterFactory.get_sap_adapter()
+    conn = get_db_connection()
+    now = datetime.now().isoformat()
+    
+    def get_workshop(product_code):
+        if product_code in ['TV-32', 'TV-40', 'TV-55', 'TV-65', 'TV-85']:
+            return 'SMT'
+        elif product_code in ['TV-42', 'TV-50', 'PCBA-Simple']:
+            return 'DIP'
+        else:
+            return 'ASSEMBLY'
+    
+    def get_component_info(product_code):
+        comp_map = {
+            'TV-32': ('C32-001', '32 inch Main Board'),
+            'TV-40': ('C40-001', '40 inch Main Board'),
+            'TV-42': ('C42-001', '42 inch LED Driver'),
+            'TV-50': ('C50-001', '50 inch LED Driver'),
+            'TV-55': ('C55-001', '55 inch Main Board'),
+            'TV-65': ('C65-001', '65 inch Main Board'),
+            'TV-75': ('C75-001', '75 inch Main Board'),
+            'TV-85': ('C85-001', '85 inch Main Board'),
+            'PCBA-Simple': ('PCBA-SIM-001', 'Simple PCBA Unit'),
+        }
+        return comp_map.get(product_code, ('COMP-001', 'Generic Component'))
     
     try:
         orders = sap.get_orders_from_zpp008()
-        # TODO: 将订单数据保存到 work_orders 表
-        return jsonify({'success': True, 'count': len(orders), 'orders': orders})
+        saved_count = 0
+        
+        for order in orders:
+            product_code = order.get('product_code', 'TV-55')
+            workshop = get_workshop(product_code)
+            comp_code, comp_desc = get_component_info(product_code)
+            
+            task_id = f"WO-{workshop[:3]}-{order.get('sales_order', '')}-{order.get('item', '')}"
+            job_id = f"JOB-{order.get('sales_order', '')}"
+            qty = order.get('qty', 100)
+            priority = order.get('priority', 3)
+            deadline = order.get('demand_date', '')
+            
+            conn.execute("""
+                INSERT INTO work_orders (
+                    task_id, job_id, product_code, resource_id, qty, std_time,
+                    priority, material_time, software_time, deadline, smt_side,
+                    related_task_id, process_req, status, planned_start, planned_end,
+                    setup_time, is_locked, plan_type, created_at, updated_at,
+                    workshop, component_code, component_desc
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                task_id, job_id, product_code, None, qty, qty * 0.1,
+                priority, 0, 0, deadline, 'A', None, None, 'Pending',
+                None, None, 10, 0, 'normal', now, now,
+                workshop, comp_code, comp_desc
+            ))
+            saved_count += 1
+        
+        conn.commit()
+        return jsonify({'success': True, 'count': saved_count, 'message': f'成功同步 {saved_count} 条订单'})
     except Exception as e:
         logger.error(f"同步 SAP 订单失败: {e}")
         return jsonify({'success': False, 'message': str(e)}), 500

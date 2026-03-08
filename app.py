@@ -3,6 +3,7 @@ from database import init_db, reset_db, get_db_connection
 from scheduler import run_advanced_scheduling
 from scheduler_core import GreedyScheduler, GeneticScheduler, SimulatedAnnealingScheduler
 from api.routes import api_bp
+from api.mes_orders import mes_api_bp
 import datetime
 
 app = Flask(__name__)
@@ -10,6 +11,7 @@ init_db()
 
 # 注册 API 蓝图
 app.register_blueprint(api_bp)
+app.register_blueprint(mes_api_bp)
 
 # 1. 修改 index 路由：获取 resources 并传给模板
 @app.route('/')
@@ -655,8 +657,88 @@ def add_order():
 
 @app.route('/manage/reset', methods=['POST'])
 def reset_data():
-    reset_db()
-    return redirect(url_for('manage'))
+    """重置系统：清空订单并从SAP同步新数据"""
+    from database import get_db_connection
+    import subprocess
+    import os
+    
+    try:
+        # 1. 清空订单表
+        conn = get_db_connection()
+        conn.execute('DELETE FROM work_orders')
+        conn.commit()
+        
+        # 2. 从SAP同步订单
+        from adapters.base import AdapterFactory
+        from datetime import datetime
+        
+        sap = AdapterFactory.get_sap_adapter()
+        orders = sap.get_orders_from_zpp008()
+        now = datetime.now().isoformat()
+        
+        def get_workshop(product_code):
+            if product_code in ['TV-32', 'TV-40', 'TV-55', 'TV-65', 'TV-85']:
+                return 'SMT'
+            elif product_code in ['TV-42', 'TV-50', 'PCBA-Simple']:
+                return 'DIP'
+            return 'ASSEMBLY'
+        
+        def get_component_info(product_code):
+            comp_map = {
+                'TV-32': ('C32-001', '32 inch Main Board'),
+                'TV-40': ('C40-001', '40 inch Main Board'),
+                'TV-42': ('C42-001', '42 inch LED Driver'),
+                'TV-50': ('C50-001', '50 inch LED Driver'),
+                'TV-55': ('C55-001', '55 inch Main Board'),
+                'TV-65': ('C65-001', '65 inch Main Board'),
+                'TV-75': ('C75-001', '75 inch Main Board'),
+                'TV-85': ('C85-001', '85 inch Main Board'),
+                'PCBA-Simple': ('PCBA-SIM-001', 'Simple PCBA Unit'),
+            }
+            return comp_map.get(product_code, ('COMP-001', 'Generic Component'))
+        
+        saved = 0
+        for order in orders:
+            product_code = order.get('product_code', 'TV-55')
+            workshop = get_workshop(product_code)
+            comp_code, comp_desc = get_component_info(product_code)
+            
+            task_id = f"WO-{workshop[:3]}-{order.get('sales_order', '')}-{order.get('item', '')}"
+            job_id = f"JOB-{order.get('sales_order', '')}"
+            qty = order.get('qty', 100)
+            priority = order.get('priority', 3)
+            deadline = order.get('demand_date', '')
+            
+            conn.execute("""
+                INSERT INTO work_orders (
+                    task_id, job_id, product_code, resource_id, qty, std_time,
+                    priority, material_time, software_time, deadline, smt_side,
+                    related_task_id, process_req, status, planned_start, planned_end,
+                    setup_time, is_locked, plan_type, created_at, updated_at,
+                    workshop, component_code, component_desc
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                task_id, job_id, product_code, None, qty, qty * 0.1,
+                priority, 0, 0, deadline, 'A', None, None, 'Pending',
+                None, None, 10, 0, 'normal', now, now,
+                workshop, comp_code, comp_desc
+            ))
+            saved += 1
+        
+        conn.commit()
+        
+        # 3. Git提交
+        try:
+            os.chdir('C:/Users/mtc/Desktop/MyAPS')
+            subprocess.run(['git', 'add', 'tv_aps_pro_v3.db'], capture_output=True)
+            subprocess.run(['git', 'commit', '-m', f'Reset: synced {saved} orders'], capture_output=True)
+            subprocess.run(['git', 'push'], capture_output=True, timeout=30)
+        except Exception as e:
+            print(f'Git error: {e}')
+        
+        return redirect(url_for('manage') + '?reset=ok&count=' + str(saved))
+    except Exception as e:
+        return redirect(url_for('manage') + '?reset=fail&msg=' + str(e))
 
 @app.route('/api/update_order_manual', methods=['POST'])
 def update_order_manual():
