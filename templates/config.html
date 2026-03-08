@@ -340,7 +340,7 @@
                                     <strong>警告：</strong>此操作将清空所有订单数据并从SAP重新同步！
                                 </div>
                                 <div class="d-grid gap-2 mt-3">
-                                    <button class="btn btn-danger" onclick="resetSystem()">
+                                    <button class="btn btn-danger" onclick="resetSystem(this)">
                                         <i class="fas fa-redo"></i> 重置系统
                                     </button>
                                 </div>
@@ -745,7 +745,7 @@ async function syncFromSAP() {
     }
 }
 
-async function resetSystem() {
+async function resetSystem(btn) {
     if(!confirm('确定要重置系统吗？这将清空所有订单并从SAP重新同步数据。')) {
         return;
     }
@@ -755,30 +755,29 @@ async function resetSystem() {
     }
     
     // Show loading indicator
-    const btn = event.target;
     const originalText = btn.innerHTML;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 正在同步SAP...';
     btn.disabled = true;
     
-    try {
-        const res = await fetch('/manage/reset', {method: 'POST'});
-        
-        // Hide loading
-        btn.innerHTML = originalText;
-        btn.disabled = false;
-        
-        // Reload all data
-        await loadDashboard();
-        await loadMappings();
-        await loadCapacities();
-        await loadResources();
-        
-        alert('重置成功！数据已从SAP同步并刷新显示');
-    } catch(e) {
-        btn.innerHTML = originalText;
-        btn.disabled = false;
-        alert('重置失败: ' + e);
-    }
+    fetch('/manage/reset', {method: 'POST'})
+        .then(function(res) {
+            // Hide loading
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+            
+            // Reload all data
+            loadDashboard();
+            loadMappings();
+            loadCapacities();
+            loadResources();
+            
+            alert('重置成功！数据已从SAP同步并刷新显示');
+        })
+        .catch(function(e) {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+            alert('重置失败: ' + e);
+        });
 }
 
 function openResourceModal() {
