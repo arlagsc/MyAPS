@@ -750,14 +750,6 @@ async function resetSystem(btn) {
         return;
     }
     
-    if(!confirm('此操作不可撤销，确定继续吗？')) {
-        return;
-    }
-    
-    // Prevent any default form submission
-    event.preventDefault();
-    event.stopPropagation();
-    
     // Show loading indicator
     const originalText = btn.innerHTML;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 正在同步SAP...';
