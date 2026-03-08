@@ -750,47 +750,8 @@ async function resetSystem() {
         return false;
     }
     
-    var btn = document.getElementById('resetBtn');
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 正在同步...';
-    
-    // Use XMLHttpRequest with explicit handling
-    var xhr = new XMLHttpRequest();
-    xhr.open('POST', '/manage/reset', true);
-    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-    
-    xhr.onreadystatechange = function() {
-        if(xhr.readyState === 4) {
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-redo"></i> 重置系统';
-            
-            if(xhr.status === 200) {
-                try {
-                    var data = JSON.parse(xhr.responseText);
-                    
-                    // Reload all data
-                    loadDashboard();
-                    loadMappings();
-                    loadCapacities();
-                    loadResources();
-                    
-                    alert('重置成功！已同步 ' + data.count + ' 条订单');
-                } catch(e) {
-                    alert('解析失败: ' + e);
-                }
-            } else {
-                alert('请求失败: ' + xhr.status);
-            }
-        }
-    };
-    
-    xhr.onerror = function() {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-redo"></i> 重置系统';
-        alert('网络错误');
-    };
-    
-    xhr.send('');
+    // 直接刷新页面，让服务器处理重置
+    window.location.href = '/manage/reset';
     
     return false;
 }
