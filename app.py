@@ -663,7 +663,7 @@ def reset_data():
     import os
     
     try:
-        # 1. 清空订单表
+        # 1. Clear orders only (not full reset)
         conn = get_db_connection()
         conn.execute('DELETE FROM work_orders')
         conn.commit()
