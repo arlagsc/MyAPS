@@ -3,52 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <title>APS 专业排产看板</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏭</text></svg>">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment-with-locales.min.js"></script>
-    
     <script src="https://unpkg.com/vis-timeline@latest/standalone/umd/vis-timeline-graph2d.min.js"></script>
     <link href="https://unpkg.com/vis-timeline@latest/styles/vis-timeline-graph2d.min.css" rel="stylesheet" />
 
     <style>
         body { background-color: #f8f9fa; }
         #visualization { background-color: white; border: 1px solid #ddd; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-        .vis-labelset .vis-label { border-bottom: 1px solid #eee; background-color: #fcfcfc; color: #333; display: flex; align-items: center; padding-left: 10px; font-weight: 500; }
-        .vis-time-axis .vis-grid.vis-minor { border-color: #f5f5f5; }
-        .vis-time-axis .vis-grid.vis-major { border-color: #e0e0e0; }
+        .vis-item { border-color: transparent; border-radius: 2px; font-size: 12px; color: white; display: flex; align-items: center; padding-left: 5px; }
         
-        .vis-item {
-            border-color: transparent; border-radius: 2px; font-size: 12px; color: white;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.1); font-family: 'Segoe UI', sans-serif;
-            display: flex; align-items: center; padding-left: 5px;
-        }
-        .vis-item.vis-selected { border: 1px solid #333; box-shadow: 0 0 0 2px rgba(0,0,0,0.2); z-index: 999; }
-
-        /* 颜色样式 */
         .vis-item-blue { background-color: #3498db; border-left: 4px solid #2980b9; }
         .vis-item-red  { background-color: #e74c3c; border-left: 4px solid #c0392b; } 
         .vis-item-dark { background-color: #34495e; border-left: 4px solid #2c3e50; } 
         .vis-item-striped { background: repeating-linear-gradient(45deg,#606dbc,#606dbc 10px,#465298 10px,#465298 20px); border-left: 4px solid #333; }
+        .vis-item-warning { background-color: #f39c12 !important; border-left: 5px solid #d35400 !important; color: #fff !important; }
+        
+        /* 阶段四核心：严重违规报错 (A/B 面 48H) */
+        .vis-item-error { background-color: #8b0000 !important; border: 2px dashed #ff4500 !important; color: #fff !important; font-weight: bold; animation: blink 1s infinite;}
+        @keyframes blink { 50% { opacity: 0.7; } }
 
-        .toolbar { background: #fff; padding: 15px; border-bottom: 1px solid #ddd; box-shadow: 0 2px 5px rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; }
+        /* 阶段四核心：设备保养阴影背景 */
+        .vis-item-maintenance { background: repeating-linear-gradient(45deg, rgba(169,169,169,0.3), rgba(169,169,169,0.3) 10px, rgba(0,0,0,0.1) 10px, rgba(0,0,0,0.1) 20px) !important; border: none !important;}
 
-        /* 警告样式 */
-        /* 放在 style 标签的最后面，确保覆盖其他颜色 */
-        .vis-item-warning {
-            background-color: #f39c12 !important; /* 强制橙色 */
-            border-left: 5px solid #d35400 !important;
-            color: #fff !important;
-            /* 条纹背景 */
-            background-image: repeating-linear-gradient(
-                45deg,
-                rgba(255, 255, 255, 0.2),
-                rgba(255, 255, 255, 0.2) 10px,
-                transparent 10px,
-                transparent 20px
-            ) !important;
-        }
+        .toolbar { background: #fff; padding: 15px; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; }
     </style>
 </head>
 <body>
@@ -56,304 +35,144 @@
 <div class="toolbar sticky-top">
     <div class="d-flex align-items-center">
         <h4 class="m-0 me-4 text-primary"><i class="fas fa-industry"></i> APS 排产看板</h4>
-        <div class="small text-muted me-3"><i class="fas fa-mouse"></i> 滚轮缩放 | 双击修改 | 拖拽移动</div>
-        <a href="/resources" class="btn btn-outline-dark btn-sm">⚙️ 产线配置</a>
-        <a href="/config" class="btn btn-outline-primary btn-sm">⚙️ 配置中心</a>
-        <div class="btn-group ms-2">
-            <a href="/dashboard/smt" class="btn btn-sm" style="background:#238636; color:white;">SMT车间</a>
-            <a href="/dashboard/dip" class="btn btn-sm" style="background:#8957e5; color:white;">DIP车间</a>
-            <a href="/dashboard/assembly" class="btn btn-sm" style="background:#d97706; color:white;">总装车间</a>
-        </div>
+        <button class="btn btn-outline-danger btn-sm me-2" data-bs-toggle="modal" data-bs-target="#maintenanceModal"><i class="fas fa-tools"></i> 异常/停机录入</button>
+        <a href="/manage" class="btn btn-outline-dark btn-sm">⚙️ 数据管理</a>
     </div>
     <div>
         <div class="text-muted small mb-1 text-end">
             <span class="badge bg-secondary">■ 锁定</span> 
-            <span class="badge bg-primary">■ 正常</span> 
             <span class="badge bg-warning text-dark">■ 时间不足</span> 
-            <span class="badge" style="background:#606dbc">▧ 模拟</span>
+            <span class="badge" style="background:#8b0000">■ 违反时序约束</span>
+            <span class="badge" style="background:#ccc; color:#333;">▧ 设备停机</span>
         </div>
-        <div class="input-group input-group-sm me-2" style="width: 150px;">
-            <span class="input-group-text bg-white"><i class="fas fa-microchip"></i></span>
+        <div class="input-group input-group-sm d-inline-flex w-auto me-2">
             <select class="form-select" id="algoSelect">
                 <option value="greedy">⚡ 极速贪婪</option>
                 <option value="ga">🧬 遗传算法</option>
-                <option value="sa">🔥 模拟退火</option>
             </select>
         </div>
         <div class="btn-group">
-            <button onclick="timeline.fit()" class="btn btn-outline-secondary btn-sm"><i class="fas fa-compress-arrows-alt"></i> 适应</button>
             <button id="btnRunOfficial" onclick="runSchedule('OFFICIAL')" class="btn btn-primary btn-sm">▶ 正式排产</button>
-            <button id="btnRunSim" onclick="runSchedule('SIMULATION')" class="btn btn-warning btn-sm">🧪 模拟排产</button>
-            <a href="/manage" class="btn btn-outline-dark btn-sm">⚙️ 数据管理</a>
+            <button id="btnRunSim" onclick="runSchedule('SIMULATION')" class="btn btn-warning btn-sm">🧪 模拟</button>
         </div>
     </div>
 </div>
 
 <div class="container-fluid mt-3">
     <div id="visualization"></div>
-    <div id="loading" class="text-center p-5 text-muted" style="display:none;"><i class="fas fa-spinner fa-spin fa-2x"></i><br>加载数据中...</div>
 </div>
 
-<div class="modal fade" id="editTaskModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
+<div class="modal fade" id="maintenanceModal" tabindex="-1">
+    <div class="modal-dialog">
         <div class="modal-content">
-            <div class="modal-header bg-light">
-                <h5 class="modal-title"><i class="fas fa-edit"></i> 调整排产计划</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title"><i class="fas fa-tools"></i> 录入设备异常/停机时间</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-
-                <form id="editTaskForm">
-                    <input type="hidden" id="edit_task_id">
-                    <input type="hidden" id="edit_std_time"> 
-                    
+                <form id="maintenanceForm">
                     <div class="mb-3">
-                        <label for="edit_task_name" class="form-label text-muted small">任务名称</label>
-                        <input type="text" class="form-control bg-light" id="edit_task_name" readonly>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="edit_resource_id" class="form-label small fw-bold text-primary">调整产线</label>
-                        <select class="form-select" id="edit_resource_id">
+                        <label class="form-label fw-bold">停机产线</label>
+                        <select class="form-select" id="maint_line_id">
                             {% for r in resources %}
                             <option value="{{r.id}}">{{r.name}}</option>
                             {% endfor %}
                         </select>
                     </div>
-                    
-                    <div class="row g-2 mb-2">
-                        <div class="col-6">
-                            <label for="edit_start_time" class="form-label small fw-bold">计划开始</label>
-                            <input type="datetime-local" class="form-control" id="edit_start_time" oninput="checkDuration()">
-                        </div>
-                        <div class="col-6">
-                            <label for="edit_end_time" class="form-label small fw-bold">计划结束</label>
-                            <input type="datetime-local" class="form-control" id="edit_end_time" oninput="checkDuration()">
-                        </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">类型</label>
+                        <select class="form-select" id="maint_type">
+                            <option value="EXCEPTION">🔴 设备异常 (故障)</option>
+                            <option value="MAINTENANCE">🟠 例行保养 (计划内)</option>
+                        </select>
                     </div>
-                    
-                    <div id="duration_warning" class="alert alert-warning small py-1 mb-3" style="display:none; color: #856404; background-color: #fff3cd; border-color: #ffeeba;">
-                        <i class="fas fa-exclamation-triangle"></i> <strong>时间不足！</strong> 
-                        标准工时: <span id="lbl_std" class="fw-bold"></span>m，
-                        当前计划: <span id="lbl_curr" class="fw-bold text-danger"></span>m
+                    <div class="row mb-3">
+                        <div class="col-6"><label>开始时间</label><input type="datetime-local" class="form-control" id="maint_start"></div>
+                        <div class="col-6"><label>结束时间</label><input type="datetime-local" class="form-control" id="maint_end"></div>
                     </div>
-
-                    <div class="form-check form-switch bg-light p-2 rounded border">
-                        <input class="form-check-input ms-0" type="checkbox" id="edit_is_locked">
-                        <label class="form-check-label ms-2 fw-bold text-danger" for="edit_is_locked">锁定此计划</label>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">备注原因</label>
+                        <input type="text" class="form-control" id="maint_reason" placeholder="例如：贴片机换料、轨道卡板等">
                     </div>
                 </form>
-
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                <button type="button" class="btn btn-primary" onclick="saveTaskChanges()">保存修改</button>
+                <button type="button" class="btn btn-danger" onclick="saveMaintenance()">确认停机时间</button>
             </div>
         </div>
     </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-
 <script>
-    let timeline;
-    let itemsObj, groupsObj;
-    let editModal;
+    let timeline, itemsObj, groupsObj;
 
     document.addEventListener('DOMContentLoaded', function() {
-        // 设置 moment 语言
         moment.locale('zh-cn');
-        editModal = new bootstrap.Modal(document.getElementById('editTaskModal'));
         initTimeline();
         loadData();
     });
 
     function initTimeline() {
         const container = document.getElementById('visualization');
-        itemsObj = new vis.DataSet([]);
-        groupsObj = new vis.DataSet([]);
-
+        itemsObj = new vis.DataSet([]); groupsObj = new vis.DataSet([]);
         const options = {
-            // === 核心修复 2：解决 locale 报错 ===
-            locale: 'zh-cn',
-            locales: {
-                'zh-cn': {
-                    current: '当前',
-                    time: '时间',
-                    deleteSelected: '删除选中',
-                }
-            },
-            
-            snap: null, 
-            stack: true,
-            margin: { item: { horizontal: 0, vertical: 5 }, axis: 5 },
-            groupOrder: 'value',
-            editable: { add: false, remove: false, updateGroup: true, updateTime: true },
-            orientation: 'top', verticalScroll: true, zoomKey: 'ctrlKey', maxHeight: '800px', minHeight: '400px',
-            tooltip: { followMouse: true, overflowMethod: 'cap' },
-            onMove: function (item, callback) {
-                updateTask(item); 
-                callback(item);
-            }
+            locale: 'zh-cn', snap: null, stack: true, orientation: 'top',
+            editable: { updateGroup: true, updateTime: true },
+            onMove: function (item, callback) { updateTask(item); callback(item); }
         };
-
         timeline = new vis.Timeline(container, itemsObj, groupsObj, options);
-        timeline.on('doubleClick', function (properties) {
-            if (properties.item) {
-                const item = itemsObj.get(properties.item);
-                if(item) openEditModal(item);
-            }
-        });
     }
 
     function loadData() {
-        document.getElementById('loading').style.display = 'block';
         fetch('/api/schedule_data').then(r => r.json()).then(data => {
-            groupsObj.clear();
-            groupsObj.add(data.groups);
-            itemsObj.clear();
-            itemsObj.add(data.items);
+            groupsObj.clear(); groupsObj.add(data.groups);
+            itemsObj.clear(); itemsObj.add(data.items);
             timeline.fit();
-            document.getElementById('loading').style.display = 'none';
         });
     }
 
-    // === 拖拽保存 ===
     function updateTask(item) {
-        let start = moment(item.start);
-        let end = moment(item.end);
         let payload = {
             task_id: item.id, resource_id: item.group, 
-            planned_start: start.format('YYYY-MM-DD HH:mm'), 
-            planned_end: end.format('YYYY-MM-DD HH:mm'), 
+            planned_start: moment(item.start).format('YYYY-MM-DD HH:mm'), 
+            planned_end: moment(item.end).format('YYYY-MM-DD HH:mm'), 
             is_locked: 1 
         };
-
         fetch('/api/update_order_manual', {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
-        }).then(r => r.json()).then(d => {
-            if (d.success) {
-                // 前端即时变色逻辑
-                let stdTime = (item.data && item.data.std_time) ? item.data.std_time : 0;
-                let durationMin = end.diff(start, 'minutes');
-                let newClass = 'vis-item-blue';
-                if (item.data.status && item.data.status.includes('Delayed')) newClass = 'vis-item-red';
-                
-                let contentHtml = item.data.name;
-                if (stdTime > 0 && durationMin < (stdTime - 1)) {
-                    newClass = 'vis-item-warning';
-                    contentHtml = `⚠️ ${item.data.name} <small>(${durationMin}/${parseInt(stdTime)}m)</small>`;
-                } else if (payload.is_locked) {
-                    newClass = 'vis-item-dark';
-                }
-
-                itemsObj.update({
-                    id: item.id, className: newClass, content: contentHtml,
-                    data: { ...item.data, is_locked: 1 }
-                });
-            } else { alert("更新失败"); loadData(); }
-        });
+        }).then(r => r.json()).then(d => loadData());
     }
 
-    // === 打开编辑窗口 ===
-    function openEditModal(item) {
-        document.getElementById('edit_task_id').value = item.id;
-        document.getElementById('edit_task_name').value = (item.data && item.data.name) ? item.data.name : item.id;
-        document.getElementById('edit_resource_id').value = item.group;
-        
-        let std = (item.data && item.data.std_time) ? item.data.std_time : 0;
-        document.getElementById('edit_std_time').value = std;
-
-        document.getElementById('edit_start_time').value = moment(item.start).format('YYYY-MM-DDTHH:mm');
-        document.getElementById('edit_end_time').value = moment(item.end).format('YYYY-MM-DDTHH:mm');
-        
-        if(item.data) document.getElementById('edit_is_locked').checked = item.data.is_locked;
-        
-        checkDuration();
-        editModal.show();
-    }
-
-    // === 实时检查工时 ===
-    function checkDuration() {
-        let std = parseFloat(document.getElementById('edit_std_time').value) || 0;
-        let sVal = document.getElementById('edit_start_time').value;
-        let eVal = document.getElementById('edit_end_time').value;
-        let warningBox = document.getElementById('duration_warning');
-        
-        if (sVal && eVal && std > 0) {
-            let s = moment(sVal);
-            let e = moment(eVal);
-            let diff = e.diff(s, 'minutes');
-            
-            if (diff < (std - 1)) {
-                warningBox.style.display = 'block';
-                document.getElementById('lbl_std').innerText = parseInt(std);
-                document.getElementById('lbl_curr').innerText = diff;
-            } else {
-                warningBox.style.display = 'none';
-            }
-        } else {
-            warningBox.style.display = 'none';
-        }
-    }
-
-    // === 保存弹窗修改 ===
-    window.saveTaskChanges = function() {
-        let taskId = document.getElementById('edit_task_id').value;
-        let resId = document.getElementById('edit_resource_id').value;
-        let start = document.getElementById('edit_start_time').value;
-        let end = document.getElementById('edit_end_time').value;
-        let locked = document.getElementById('edit_is_locked').checked ? 1 : 0;
-
-        let payload = {
-            task_id: taskId, resource_id: resId, planned_start: start, planned_end: end, is_locked: locked
-        };
-        fetch('/api/update_order_manual', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
-        }).then(r => r.json()).then(d => {
-            if (d.success) {
-                editModal.hide();
-                fetch('/api/run', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({mode: 'OFFICIAL'})})
-                .then(r2 => r2.json()).then(d2 => loadData());
-            } else { alert("保存失败"); }
-        });
-    }
-    
     window.runSchedule = function(mode) {
-        // 1. 获取选中的算法
         let selectObj = document.getElementById('algoSelect');
-        let algo = selectObj.value;
-        
-        // === 修复核心：用原生 JS 获取选中的文本，替代 jQuery 的 $() ===
-        let algoName = selectObj.options[selectObj.selectedIndex].text; 
-
-        if(!confirm(`确认使用【${algoName}】执行【${mode}】排产吗？`)) return;
-        
-        let btn = document.getElementById(mode === 'OFFICIAL' ? 'btnRunOfficial' : 'btnRunSim');
-        let oldText = btn.innerHTML;
-        btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 计算中...';
-        
-        // 2. 发送请求
         fetch('/api/run', {
-            method:'POST', 
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                mode: mode,
-                algorithm: algo 
-            })
-        }).then(r => r.json()).then(d => {
-            alert(d.message); 
-            btn.disabled = false; btn.innerHTML = oldText;
-            loadData();
-        });
+            method:'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ mode: mode, algorithm: selectObj.value })
+        }).then(r => r.json()).then(d => { alert(d.message); loadData(); });
     }
 
-    /*
-    window.runSchedule = function(mode) {
-        if(!confirm(`确认执行排产吗？`)) return;
-        fetch('/api/run', { method:'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({mode: mode})})
-        .then(r => r.json()).then(d => { alert(d.message); loadData(); });
-    }*/
+    // 提交保养记录
+    window.saveMaintenance = function() {
+        let payload = {
+            line_id: document.getElementById('maint_line_id').value,
+            type: document.getElementById('maint_type').value,
+            start_time: document.getElementById('maint_start').value,
+            end_time: document.getElementById('maint_end').value,
+            reason: document.getElementById('maint_reason').value
+        };
+        if(!payload.start_time || !payload.end_time) return alert("请填写完整时间");
+
+        fetch('/api/maintenance', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+        }).then(r => r.json()).then(d => {
+            if(d.success) {
+                bootstrap.Modal.getInstance(document.getElementById('maintenanceModal')).hide();
+                loadData();
+            } else alert("保存失败: " + d.message);
+        });
+    }
 </script>
 </body>
 </html>
