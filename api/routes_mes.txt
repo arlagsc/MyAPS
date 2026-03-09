@@ -1,0 +1,31 @@
+
+
+# MES 订单接口
+@api_bp.route('/mes/orders', methods=['GET'])
+def get_mes_orders():
+    """从MES获取订单详细信息"""
+    workshop = request.args.get('workshop', 'ALL')
+    
+    try:
+        import requests
+        response = requests.get(f'http://localhost:8080/api/mes/orders?workshop={workshop}', timeout=10)
+        if response.status_code == 200:
+            return response.json()
+    except Exception as e:
+        logger.error(f'获取MES订单失败: {e}')
+    
+    return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@api_bp.route('/mes/orders/<parent_order>', methods=['GET'])
+def get_mes_order_detail(parent_order):
+    """获取父订单详情"""
+    try:
+        import requests
+        response = requests.get(f'http://localhost:8080/api/mes/orders/{parent_order}', timeout=10)
+        if response.status_code == 200:
+            return response.json()
+    except Exception as e:
+        logger.error(f'获取MES订单详情失败: {e}')
+    
+    return jsonify({'success': False, 'message': str(e)}), 500
