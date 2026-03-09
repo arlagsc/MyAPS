@@ -1,15 +1,15 @@
 {
-    "mes": {
-        "enabled": true,
-        "base_url": "http://localhost:8080",
-        "api_key": "",
-        "timeout": 30
-    },
-    "sap": {
-        "enabled": true,
-        "base_url": "http://localhost:8080/sap",
-        "client": "100",
-        "sysid": "PRD",
-        "timeout": 30
-    }
+  "mes": {
+    "enabled": true,
+    "base_url": "http://127.0.0.1:8080",
+    "api_key": "test_key",
+    "timeout": 30
+  },
+  "sap": {
+    "enabled": true,
+    "base_url": "http://127.0.0.1:8080/sap",
+    "client": "100",
+    "sysid": "PRD",
+    "timeout": 30
+  }
 }

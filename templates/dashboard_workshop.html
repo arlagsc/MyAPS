@@ -6,58 +6,8 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏭</text></svg>">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.4.3/echarts.min.js">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
 
-async function loadMESOrders() {
-    try {
-        var res = await fetch('/api/mes/orders?workshop=' + workshopCode);
-        var data = await res.json();
-        
-        if (data.success && data.count > 0) {
-            document.getElementById('pendingCount').textContent = data.count;
-            
-            var html = '';
-            for (var i = 0; i < Math.min(data.data.length, 15); i++) {
-                var o = data.data[i];
-                var pclass = o.progress >= 100 ? 'success' : (o.progress > 0 ? 'primary' : 'warning');
-                
-                html += '<div class="work-order-item">';
-                html += '<div class="d-flex justify-content-between">';
-                html += '<span class="wo-id">' + o.task_id + '</span>';
-                html += '<span class="badge bg-' + pclass + '">' + o.progress + '%</span>';
-                html += '</div>';
-                html += '<div class="wo-product mt-1">' + o.component_desc + '</div>';
-                html += '<div class="text-muted small" style="font-size:11px;">订单: ' + o.parent_order + '</div>';
-                html += '<div class="text-muted small">编码:' + o.component_code + ' | 总量:' + o.total_qty + ' | 剩余:' + o.remaining_qty + '</div>';
-                html += '</div>';
-            }
-            
-            document.getElementById('pendingOrdersList').innerHTML = html;
-            
-            // Also populate the table (工单详情)
-            var tableHtml = '';
-            for (var i = 0; i < data.data.length; i++) {
-                var o = data.data[i];
-                var statusClass = o.status === 'Completed' ? 'success' : (o.status === 'In Progress' ? 'primary' : 'warning');
-                tableHtml += '<tr>';
-                tableHtml += '<td>' + o.task_id + '</td>';
-                tableHtml += '<td>' + (o.parent_order || o.job_id || '-') + '</td>';
-                tableHtml += '<td>' + o.product_code + '</td>';
-                tableHtml += '<td>' + o.priority + '</td>';
-                tableHtml += '<td>' + o.total_qty + '</td>';
-                tableHtml += '<td><span class="badge bg-' + statusClass + '">' + o.status + '</span></td>';
-                tableHtml += '<td>' + o.remaining_qty + '</td>';
-                tableHtml += '<td>' + o.progress + '%</td>';
-                tableHtml += '</tr>';
-            }
-            document.getElementById('ordersTableBody').innerHTML = tableHtml;
-        }
-    } catch(e) {
-        console.log('MES not available');
-    }
-}
-
-</script>
     <style>
         :root {
             --primary-color: #238636;
@@ -70,205 +20,55 @@ async function loadMESOrders() {
             --text-secondary: #8b949e;
         }
         
-        body {
-            background-color: var(--bg-dark);
-            color: var(--text-primary);
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        }
-        
-        .navbar-custom {
-            background: linear-gradient(90deg, #1a1a2e 0%, #16213e 100%);
-            padding: 15px 20px;
-        }
-        
-        .stat-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            padding: 20px;
-            transition: transform 0.2s, box-shadow 0.2s;
-        }
-        
-        .stat-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(0,0,0,0.3);
-        }
-        
-        .stat-card .stat-icon {
-            width: 50px;
-            height: 50px;
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 24px;
-        }
-        
-        .stat-card .stat-value {
-            font-size: 32px;
-            font-weight: 700;
-            margin: 10px 0 5px;
-        }
-        
-        .stat-card .stat-label {
-            color: var(--text-secondary);
-            font-size: 14px;
-        }
-        
-        .card-custom {
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            overflow: hidden;
-        }
-        
-        .card-custom .card-header {
-            background: transparent;
-            border-bottom: 1px solid var(--border-color);
-            padding: 15px 20px;
-            font-weight: 600;
-        }
-        
-        .card-custom .card-body {
-            padding: 15px;
-        }
-        
-        .work-order-item {
-            background: rgba(255,255,255,0.03);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 12px 15px;
-            margin-bottom: 10px;
-            transition: all 0.2s;
-        }
-        
-        .work-order-item:hover {
-            background: rgba(255,255,255,0.06);
-            border-color: var(--primary-color);
-        }
-        
-        .work-order-item .wo-id {
-            font-weight: 600;
-            color: var(--text-primary);
-        }
-        
-        .work-order-item .wo-product {
-            color: var(--text-secondary);
-            font-size: 13px;
-        }
-        
-        .work-order-item .wo-qty {
-            background: rgba(255,255,255,0.1);
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-        }
-        
-        .line-status {
-            display: inline-block;
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            margin-right: 8px;
-        }
-        
+        body { background-color: var(--bg-dark); color: var(--text-primary); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+        .navbar-custom { background: linear-gradient(90deg, #1a1a2e 0%, #16213e 100%); padding: 15px 20px; }
+        .stat-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 20px; transition: transform 0.2s, box-shadow 0.2s; }
+        .stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,0.3); }
+        .stat-card .stat-icon { width: 50px; height: 50px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 24px; }
+        .stat-card .stat-value { font-size: 32px; font-weight: 700; margin: 10px 0 5px; }
+        .stat-card .stat-label { color: var(--text-secondary); font-size: 14px; }
+        .card-custom { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; overflow: hidden; margin-bottom: 24px;}
+        .card-custom .card-header { background: transparent; border-bottom: 1px solid var(--border-color); padding: 15px 20px; font-weight: 600; }
+        .card-custom .card-body { padding: 15px; }
+        .work-order-item { background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px 15px; margin-bottom: 10px; transition: all 0.2s; }
+        .work-order-item:hover { background: rgba(255,255,255,0.06); border-color: var(--primary-color); }
+        .work-order-item .wo-id { font-weight: 600; color: var(--text-primary); }
+        .work-order-item .wo-product { color: var(--text-secondary); font-size: 13px; }
+        .line-status { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; }
         .line-status.idle { background: #8b949e; }
         .line-status.running { background: #238636; animation: pulse 2s infinite; }
-        .line-status.warning { background: #d97706; }
-        .line-status.error { background: #da3633; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
         
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
+        /* 矩阵表专属样式 (类 Excel) */
+        .table-matrix-wrapper { overflow-x: auto; max-height: 600px; }
+        .table-matrix { border-collapse: separate; border-spacing: 0; min-width: 1800px; color: var(--text-primary); font-size: 12px;}
+        .table-matrix th, .table-matrix td { border: 1px solid #30363d; padding: 6px 10px; vertical-align: middle; white-space: nowrap; }
+        .table-matrix thead th { background: #21262d; color: #c9d1d9; position: sticky; top: 0; z-index: 10; font-weight: normal; }
         
-        .progress-custom {
-            height: 6px;
-            background: var(--border-color);
-            border-radius: 3px;
-            overflow: hidden;
-        }
+        /* 冻结前五列 */
+        .sticky-col-1 { position: sticky; left: 0; background: #161b22; z-index: 5; font-weight: bold;}
+        .sticky-col-2 { position: sticky; left: 100px; background: #161b22; z-index: 5; }
+        .sticky-col-3 { position: sticky; left: 240px; background: #161b22; z-index: 5; }
+        .sticky-col-4 { position: sticky; left: 340px; background: #161b22; z-index: 5; text-align: center;}
+        .sticky-col-5 { position: sticky; left: 400px; background: #161b22; z-index: 5; border-right: 2px solid #238636 !important;}
         
-        .progress-custom .progress-bar {
-            background: linear-gradient(90deg, var(--primary-color), #2ea043);
-        }
+        .table-matrix thead .sticky-col-1, .table-matrix thead .sticky-col-2, .table-matrix thead .sticky-col-3, .table-matrix thead .sticky-col-4, .table-matrix thead .sticky-col-5 { z-index: 15; background: #21262d;}
         
-        .badge-priority {
-            font-size: 11px;
-            padding: 3px 8px;
-        }
-        
-        .table-custom {
-            color: var(--text-primary);
-        }
-        
-        .table-custom th {
-            background: rgba(255,255,255,0.03);
-            border-bottom: 1px solid var(--border-color);
-            color: var(--text-secondary);
-            font-weight: 500;
-            font-size: 12px;
-            text-transform: uppercase;
-        }
-        
-        .table-custom td {
-            border-bottom: 1px solid var(--border-color);
-            padding: 12px;
-        }
-        
-        .table-custom tr:hover td {
-            background: rgba(255,255,255,0.03);
-        }
-        
-        .btn-workshop {
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            color: var(--text-primary);
-            padding: 8px 16px;
-            border-radius: 8px;
-            text-decoration: none;
-            transition: all 0.2s;
-        }
-        
-        .btn-workshop:hover {
-            background: var(--border-color);
-            color: white;
-        }
-        
-        .btn-workshop.active {
-            background: var(--primary-color);
-            border-color: var(--primary-color);
-        }
-        
-        .back-btn {
-            background: transparent;
-            border: 1px solid var(--border-color);
-            color: var(--text-secondary);
-            padding: 8px 16px;
-            border-radius: 8px;
-            text-decoration: none;
-            transition: all 0.2s;
-        }
-        
-        .back-btn:hover {
-            background: var(--border-color);
-            color: white;
-        }
+        /* 数据高亮背景 */
+        .cell-qty { background-color: #d97706; color: #fff; font-weight: bold; text-align: center; }
+        .table-matrix tbody tr:hover td { background-color: #30363d; }
+        .table-matrix tbody tr:hover .cell-qty { background-color: #f59e0b; }
+
+        .btn-workshop { background: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-primary); padding: 8px 16px; border-radius: 8px; text-decoration: none; transition: all 0.2s; }
+        .btn-workshop:hover { background: var(--border-color); color: white; }
     </style>
-    <meta http-equiv="refresh" content="60">
 </head>
 <body>
 
-<!-- 导航栏 -->
 <nav class="navbar-custom d-flex justify-content-between align-items-center">
     <div class="d-flex align-items-center">
-        <a href="/" class="back-btn me-3">
-            <i class="fas fa-arrow-left"></i> 返回
-        </a>
-        <h4 class="mb-0">
-            <i class="fas fa-industry me-2"></i>
-            <span id="workshopTitle">{{ workshop_name }}</span>
-        </h4>
+        <a href="/" class="btn-workshop me-3"><i class="fas fa-arrow-left"></i> 返回</a>
+        <h4 class="mb-0"><i class="fas fa-industry me-2"></i><span id="workshopTitle">{{ workshop_name }}</span></h4>
         <span class="badge bg-secondary ms-3" id="workshopCode">{{ workshop_code }}</span>
     </div>
     <div class="d-flex align-items-center">
@@ -276,474 +76,222 @@ async function loadMESOrders() {
             <div class="text-muted small">当前时间</div>
             <div id="currentTime" style="font-weight: 600;"></div>
         </div>
-        <a href="/" class="btn-workshop">
-            <i class="fas fa-home"></i> 总看板
-        </a>
+        <a href="/" class="btn-workshop"><i class="fas fa-home"></i> 总看板</a>
     </div>
 </nav>
 
 <div class="container-fluid p-4">
-    <!-- 统计卡片 -->
     <div class="row mb-4">
         <div class="col-md-3">
             <div class="stat-card" style="border-left: 4px solid #238636;">
                 <div class="d-flex justify-content-between align-items-start">
-                    <div>
-                        <div class="stat-label">待排产</div>
-                        <div class="stat-value" id="statPending">-</div>
-                    </div>
-                    <div class="stat-icon" style="background: rgba(35,134,54,0.2); color: #238636;">
-                        <i class="fas fa-clock"></i>
-                    </div>
+                    <div><div class="stat-label">待排产</div><div class="stat-value" id="statPending">-</div></div>
+                    <div class="stat-icon" style="background: rgba(35,134,54,0.2); color: #238636;"><i class="fas fa-clock"></i></div>
                 </div>
             </div>
         </div>
         <div class="col-md-3">
             <div class="stat-card" style="border-left: 4px solid #1f6feb;">
                 <div class="d-flex justify-content-between align-items-start">
-                    <div>
-                        <div class="stat-label">生产中</div>
-                        <div class="stat-value" id="statRunning">-</div>
-                    </div>
-                    <div class="stat-icon" style="background: rgba(31,111,235,0.2); color: #1f6feb;">
-                        <i class="fas fa-cog fa-spin"></i>
-                    </div>
+                    <div><div class="stat-label">生产中</div><div class="stat-value" id="statRunning">-</div></div>
+                    <div class="stat-icon" style="background: rgba(31,111,235,0.2); color: #1f6feb;"><i class="fas fa-cog fa-spin"></i></div>
                 </div>
             </div>
         </div>
         <div class="col-md-3">
             <div class="stat-card" style="border-left: 4px solid #d97706;">
                 <div class="d-flex justify-content-between align-items-start">
-                    <div>
-                        <div class="stat-label">即将到期</div>
-                        <div class="stat-value" id="statUrgent">-</div>
-                    </div>
-                    <div class="stat-icon" style="background: rgba(217,119,6,0.2); color: #d97706;">
-                        <i class="fas fa-exclamation-triangle"></i>
-                    </div>
+                    <div><div class="stat-label">即将到期</div><div class="stat-value" id="statUrgent">-</div></div>
+                    <div class="stat-icon" style="background: rgba(217,119,6,0.2); color: #d97706;"><i class="fas fa-exclamation-triangle"></i></div>
                 </div>
             </div>
         </div>
         <div class="col-md-3">
             <div class="stat-card" style="border-left: 4px solid #8b949e;">
                 <div class="d-flex justify-content-between align-items-start">
-                    <div>
-                        <div class="stat-label">已完成</div>
-                        <div class="stat-value" id="statCompleted">-</div>
-                    </div>
-                    <div class="stat-icon" style="background: rgba(139,148,158,0.2); color: #8b949e;">
-                        <i class="fas fa-check-circle"></i>
-                    </div>
+                    <div><div class="stat-label">已完成</div><div class="stat-value" id="statCompleted">-</div></div>
+                    <div class="stat-icon" style="background: rgba(139,148,158,0.2); color: #8b949e;"><i class="fas fa-check-circle"></i></div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- 产线状态和图表 -->
-    <div class="row mb-4">
-        <!-- 产线状态 -->
-        <div class="col-md-6">
+    <div class="row">
+        <div class="col-12">
             <div class="card-custom">
+                <div class="card-header d-flex justify-content-between align-items-center" style="background:#1a2332;">
+                    <span><i class="fas fa-calendar-alt me-2 text-warning"></i>生产计划矩阵表 (按天分布)</span>
+                    <button class="btn btn-sm btn-outline-success" onclick="loadMatrix()"><i class="fas fa-sync"></i> 刷新矩阵</button>
+                </div>
+                <div class="card-body p-0 table-matrix-wrapper">
+                    <table class="table-matrix w-100" id="matrixTable">
+                        <thead id="matrixTableHead">
+                            </thead>
+                        <tbody id="matrixTableBody">
+                            <tr><td colspan="20" class="text-center py-4">数据加载中...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-2">
+        <div class="col-md-6">
+            <div class="card-custom h-100">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-server me-2"></i>产线状态</span>
                     <span class="text-muted small" id="lineCount">0 条产线</span>
                 </div>
                 <div class="card-body">
-                    <div class="row" id="lineStatusGrid">
-                    </div>
+                    <div class="row" id="lineStatusGrid"></div>
                 </div>
             </div>
         </div>
-        
-        <!-- 产量图表 -->
         <div class="col-md-6">
-            <div class="card-custom">
-                <div class="card-header">
-                    <i class="fas fa-chart-line me-2"></i>今日产量趋势
-                </div>
-                <div class="card-body">
-                    <div id="outputChart" style="height: 200px;"></div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Daily Plan -->
-        <div class="col-md-6">
-            <div class="card-custom">
-                <div class="card-header">
-                    <i class="fas fa-calendar-alt me-2"></i>Future 30 Days Plan
-                </div>
-                <div class="card-body" style="max-height: 250px; overflow-y: auto;">
-                    <table class="table table-sm" id="dailyPlanTable">
-                        <thead>
-                            <tr>
-                                <th>Date</th>
-                                <th>Orders</th>
-                                <th>Qty</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody id="dailyPlanBody">
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- 工单列表 -->
-    <div class="row">
-        <!-- 待排产工单 -->
-        <div class="col-md-6">
-            <div class="card-custom">
+            <div class="card-custom h-100">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <span><i class="fas fa-list-alt me-2"></i>待排产工单</span>
-                    <span class="badge bg-warning text-dark" id="pendingCount">0</span>
-                </div>
-                <div class="card-body" id="pendingOrdersList" style="max-height: 400px; overflow-y: auto;">
-                </div>
-            </div>
-        </div>
-        
-        <!-- 生产中工单 -->
-        <div class="col-md-6">
-            <div class="card-custom">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <span><i class="fas fa-play-circle me-2"></i>生产中工单</span>
+                    <span><i class="fas fa-play-circle me-2"></i>今日生产中工单</span>
                     <span class="badge bg-success" id="runningCount">0</span>
                 </div>
-                <div class="card-body" id="runningOrdersList" style="max-height: 400px; overflow-y: auto;">
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- 工单详情表格 -->
-    <div class="row mt-4">
-        <div class="col-12">
-            <div class="card-custom">
-                <div class="card-header">
-                    <i class="fas fa-table me-2"></i>工单详情
-                </div>
-                <div class="card-body p-0">
-                    <table class="table table-custom mb-0" id="ordersTable">
-                        <thead>
-                            <tr>
-                                <th>工单号</th>
-                                <th>订单号</th>
-                                <th>产品</th>
-                                <th>数量</th>
-                                <th>优先级</th>
-                                <th>产线</th>
-                                <th>状态</th>
-                                <th>截止日期</th>
-                                <th>进度</th>
-                            </tr>
-                        </thead>
-                        <tbody id="ordersTableBody">
-                        </tbody>
-                    </table>
-                </div>
+                <div class="card-body" id="runningOrdersList" style="max-height: 400px; overflow-y: auto;"></div>
             </div>
         </div>
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js">
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+const workshopCode = '{{ workshop_code }}';
 
-async function loadMESOrders() {
+function updateTime() { document.getElementById('currentTime').textContent = new Date().toLocaleString('zh-CN'); }
+updateTime(); setInterval(updateTime, 1000);
+
+// === 加载排产矩阵 (核心) ===
+async function loadMatrix() {
     try {
-        var res = await fetch('/api/mes/orders?workshop=' + workshopCode);
-        var data = await res.json();
+        const res = await fetch(`/api/schedule_matrix/${workshopCode}`);
+        const data = await res.json();
+        const dates = data.dates;
+        const orders = data.orders;
+
+        // 生成表头 (类 Excel 格式)
+        const daysCN = ['日','一','二','三','四','五','六'];
+        let theadHtml = `<tr>
+            <th class="sticky-col-1" style="min-width: 100px;">订单</th>
+            <th class="sticky-col-2" style="min-width: 140px;">工单号</th>
+            <th class="sticky-col-3" style="min-width: 100px;">组件/品号</th>
+            <th class="sticky-col-4" style="min-width: 60px;">线别</th>
+            <th class="sticky-col-5" style="min-width: 60px;">批量</th>`;
         
-        if (data.success && data.count > 0) {
-            document.getElementById('pendingCount').textContent = data.count;
-            
-            var html = '';
-            for (var i = 0; i < Math.min(data.data.length, 15); i++) {
-                var o = data.data[i];
-                var pclass = o.progress >= 100 ? 'success' : (o.progress > 0 ? 'primary' : 'warning');
-                
-                html += '<div class="work-order-item">';
-                html += '<div class="d-flex justify-content-between">';
-                html += '<span class="wo-id">' + o.task_id + '</span>';
-                html += '<span class="badge bg-' + pclass + '">' + o.progress + '%</span>';
-                html += '</div>';
-                html += '<div class="wo-product mt-1">' + o.component_desc + '</div>';
-                html += '<div class="text-muted small" style="font-size:11px;">订单: ' + o.parent_order + '</div>';
-                html += '<div class="text-muted small">编码:' + o.component_code + ' | 总量:' + o.total_qty + ' | 剩余:' + o.remaining_qty + '</div>';
-                html += '</div>';
-            }
-            
-            document.getElementById('pendingOrdersList').innerHTML = html;
-            
-            // Also populate the table (工单详情)
-            var tableHtml = '';
-            for (var i = 0; i < data.data.length; i++) {
-                var o = data.data[i];
-                var statusClass = o.status === 'Completed' ? 'success' : (o.status === 'In Progress' ? 'primary' : 'warning');
-                tableHtml += '<tr>';
-                tableHtml += '<td>' + o.task_id + '</td>';
-                tableHtml += '<td>' + (o.parent_order || o.job_id || '-') + '</td>';
-                tableHtml += '<td>' + o.product_code + '</td>';
-                tableHtml += '<td>' + o.priority + '</td>';
-                tableHtml += '<td>' + o.total_qty + '</td>';
-                tableHtml += '<td><span class="badge bg-' + statusClass + '">' + o.status + '</span></td>';
-                tableHtml += '<td>' + o.remaining_qty + '</td>';
-                tableHtml += '<td>' + o.progress + '%</td>';
-                tableHtml += '</tr>';
-            }
-            document.getElementById('ordersTableBody').innerHTML = tableHtml;
+        dates.forEach(d => {
+            let dateObj = new Date(d);
+            let md = `${dateObj.getMonth()+1}/${dateObj.getDate()}`;
+            let dayStr = `星期${daysCN[dateObj.getDay()]}`;
+            theadHtml += `<th class="text-center" style="min-width: 60px;">${md}<br><small style="font-size:10px; color:#8b949e;">${dayStr}</small></th>`;
+        });
+        theadHtml += `</tr>`;
+        document.getElementById('matrixTableHead').innerHTML = theadHtml;
+
+        // 生成表体数据
+        let tbodyHtml = '';
+        if(orders.length === 0) {
+            tbodyHtml = `<tr><td colspan="${5 + dates.length}" class="text-center py-4 text-muted">暂无排产计划</td></tr>`;
+        } else {
+            orders.forEach(o => {
+                let badgeColor = o.resource_id.startsWith('S') ? 'bg-primary' : 'bg-secondary';
+                tbodyHtml += `<tr>
+                    <td class="sticky-col-1 text-info">${o.job_id || '-'}</td>
+                    <td class="sticky-col-2">${o.task_id}</td>
+                    <td class="sticky-col-3" title="${o.component_desc}">${o.product_code} ${o.smt_side !== '-' ? '('+o.smt_side+')' : ''}</td>
+                    <td class="sticky-col-4"><span class="badge ${badgeColor}">${o.resource_id}</span></td>
+                    <td class="sticky-col-5 fw-bold">${o.qty}</td>`;
+
+                dates.forEach(d => {
+                    let dailyQty = o.daily_dist[d];
+                    if (dailyQty) {
+                        // 有数量则高亮显示黄色/橙色单元格
+                        tbodyHtml += `<td class="cell-qty">${dailyQty}</td>`;
+                    } else {
+                        // 无数量显示空白
+                        tbodyHtml += `<td class="text-center text-muted" style="opacity: 0.2;">-</td>`;
+                    }
+                });
+                tbodyHtml += `</tr>`;
+            });
         }
+        document.getElementById('matrixTableBody').innerHTML = tbodyHtml;
     } catch(e) {
-        console.log('MES not available');
+        console.error("加载矩阵失败:", e);
+        document.getElementById('matrixTableBody').innerHTML = `<tr><td colspan="20" class="text-danger text-center">数据加载失败</td></tr>`;
     }
 }
 
-</script>
-<script>
-// 车间配置
-const workshopCode = '{{ workshop_code }}';
-const workshopName = '{{ workshop_name }}';
-
-// 更新时间
-function updateTime() {
-    const now = new Date();
-    document.getElementById('currentTime').textContent = now.toLocaleString('zh-CN');
-}
-updateTime();
-setInterval(updateTime, 1000);
-
-// 初始化图表
-let outputChart = echarts.init(document.getElementById('outputChart'));
-const chartOption = {
-    backgroundColor: 'transparent',
-    grid: { top: 30, right: 20, bottom: 30, left: 50 },
-    xAxis: {
-        type: 'category',
-        data: ['8:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00'],
-        axisLine: { lineStyle: { color: '#30363d' } },
-        axisLabel: { color: '#8b949e' }
-    },
-    yAxis: {
-        type: 'value',
-        axisLine: { lineStyle: { color: '#30363d' } },
-        axisLabel: { color: '#8b949e' },
-        splitLine: { lineStyle: { color: '#21262d' } }
-    },
-    series: [{
-        data: [120, 200, 150, 280, 190, 230, 210],
-        type: 'line',
-        smooth: true,
-        areaStyle: {
-            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-                { offset: 0, color: 'rgba(35, 134, 54, 0.5)' },
-                { offset: 1, color: 'rgba(35, 134, 54, 0.1)' }
-            ])
-        },
-        lineStyle: { color: '#238636' },
-        itemStyle: { color: '#238636' }
-    }]
-};
-outputChart.setOption(chartOption);
-window.addEventListener('resize', () => outputChart.resize());
-
-// 加载数据
-async function loadData() {
+// === 加载概览统计和进行中列表 ===
+async function loadOverview() {
     try {
-        // 获取工单数据
         const response = await fetch(`/api/orders/by_workshop/${workshopCode}`);
         const orders = await response.json();
         
-        // 获取MES订单详细信息
-        let mesOrders = [];
-        try {
-            const mesRes = await fetch('/api/mes/orders?workshop=' + workshopCode);
-            const mesData = await mesRes.json();
-            if (mesData.success) {
-                mesOrders = mesData.data;
-            }
-        } catch(e) {
-            console.log('MES orders not available');
-        }
-        
-        // 统计
         const pending = orders.filter(o => o.status === 'Pending');
-        const running = orders.filter(o => o.status === 'In Progress');
-        const completed = orders.filter(o => o.status === 'Completed');
-        
-        // Load daily plan
-        loadDailyPlan(orders);
-        const urgent = pending.filter(o => {
-            if (!o.deadline) return false;
-            return new Date(o.deadline) - new Date() < 24 * 60 * 60 * 1000;
-        });
+        const running = orders.filter(o => o.status.includes('Scheduled') || o.status === 'In Progress');
+        const completed = orders.filter(o => o.status === 'Completed' || o.status === 'Done');
+        const urgent = pending.filter(o => o.deadline && (new Date(o.deadline) - new Date() < 86400000));
         
         document.getElementById('statPending').textContent = pending.length;
         document.getElementById('statRunning').textContent = running.length;
         document.getElementById('statUrgent').textContent = urgent.length;
         document.getElementById('statCompleted').textContent = completed.length;
-        document.getElementById('pendingCount').textContent = pending.length;
         document.getElementById('runningCount').textContent = running.length;
         
-        // 显示待排产工单
-        const pendingHtml = pending.slice(0, 10).map(o => `
-            <div class="work-order-item">
-                <div class="d-flex justify-content-between align-items-start">
-                    <div>
-                        <div class="wo-id">${o.task_id}</div>
-                        <div class="wo-job" style="font-size:11px;color:#888;">订单: ${o.job_id}</div>
-                        <div class="wo-product mt-1">${o.product_code || '-'}</div>
-                    </div>
-                    <div class="text-end">
-                        <span class="wo-qty">${o.qty} 台</span>
-                        <div class="mt-1">
-                            <span class="badge badge-priority bg-${o.priority <= 3 ? 'danger' : 'warning'}">
-                                P${o.priority}
-                            </span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `).join('');
-        document.getElementById('pendingOrdersList').innerHTML = pendingHtml || '<div class="text-muted text-center p-4">暂无待排产工单</div>';
-        
-        // 显示生产中工单
-        const runningHtml = running.slice(0, 10).map(o => `
+        const runningHtml = running.slice(0, 15).map(o => `
             <div class="work-order-item" style="border-left: 3px solid #238636;">
                 <div class="d-flex justify-content-between align-items-start">
                     <div>
                         <div class="wo-id">${o.task_id}</div>
-                        <div class="wo-job" style="font-size:11px;color:#888;">订单: ${o.job_id}</div>
                         <div class="wo-product mt-1">${o.product_code || '-'} | ${o.resource_id || '自动分配'}</div>
                     </div>
-                    <div>
-                        <span class="badge bg-success">生产中</span>
+                    <div class="text-end">
+                        <div class="text-success fw-bold small mb-1">${o.qty} 台</div>
+                        <span class="badge bg-success">已排产</span>
                     </div>
-                </div>
-                <div class="progress-custom mt-2">
-                    <div class="progress-bar" style="width: ${Math.random() * 60 + 20}%"></div>
                 </div>
             </div>
         `).join('');
-        document.getElementById('runningOrdersList').innerHTML = runningHtml || '<div class="text-muted text-center p-4">暂无生产中工单</div>';
-        
-        // 工单表格
-        const tableHtml = orders.slice(0, 20).map(o => `
-            <tr>
-                <td><strong>${o.task_id}</strong></td>
-                <td>${o.job_id || '-'}</td>
-                <td>${o.product_code || '-'}</td>
-                <td>${o.qty}</td>
-                <td><span class="badge bg-${o.priority <= 3 ? 'danger' : 'secondary'}">P${o.priority}</span></td>
-                <td>${o.resource_id || 'AUTO'}</td>
-                <td><span class="badge bg-${o.status === 'Completed' ? 'success' : o.status === 'In Progress' ? 'primary' : 'warning'}">${o.status}</span></td>
-                <td>${o.deadline || '-'}</td>
-                <td>
-                    <div class="progress-custom" style="width: 80px;">
-                        <div class="progress-bar" style="width: ${o.status === 'Completed' ? 100 : o.status === 'In Progress' ? 50 : 0}%"></div>
-                    </div>
-                </td>
-            </tr>
-        `).join('');
-        document.getElementById('ordersTableBody').innerHTML = tableHtml;
-        
+        document.getElementById('runningOrdersList').innerHTML = runningHtml || '<div class="text-muted text-center p-4">暂无进行中工单</div>';
     } catch (error) {
-        console.error('加载数据失败:', error);
+        console.error('加载概览失败:', error);
     }
 }
 
-// 加载产线状态
+// === 加载产线状态 ===
 async function loadLineStatus() {
     try {
         const response = await fetch('/api/resource_manage');
         const resources = await response.json();
+        const typeMap = { 'SMT': 'SMT', 'DIP': 'DIP', 'ASSEMBLY': 'Production' };
         
-        // 根据车间筛选产线
-        const typeMap = { 'SMT': 'SMT', 'DIP': 'DIP', 'ASSEMBLY': 'ASSEMBLY' };
-        const lines = resources.filter(r => r.type === typeMap[workshopCode] || (workshopCode === 'ASSEMBLY' && r.type));
-        
+        const lines = resources.filter(r => r.type === typeMap[workshopCode] || (workshopCode === 'ASSEMBLY' && r.id.startsWith('Line')));
         document.getElementById('lineCount').textContent = `${lines.length} 条产线`;
         
         const linesHtml = lines.map(line => `
             <div class="col-4 col-md-3 mb-3">
                 <div class="text-center p-3" style="background: rgba(255,255,255,0.03); border-radius: 8px;">
-                    <div class="line-status ${Math.random() > 0.5 ? 'running' : 'idle'}"></div>
+                    <div class="line-status ${Math.random() > 0.3 ? 'running' : 'idle'}"></div>
                     <div class="mt-2" style="font-weight: 600;">${line.id}</div>
-                    <div class="small text-muted">${line.name || line.type}</div>
                 </div>
             </div>
         `).join('');
         document.getElementById('lineStatusGrid').innerHTML = linesHtml;
-        
-    } catch (error) {
-        console.error('加载产线失败:', error);
-    }
+    } catch (error) {}
 }
 
-// 初始化
-loadData();
-// loadMESOrders(); // Disabled - MES returns random data
-// loadMESOrders(); // Disabled - MES returns random data
+// 初始化调用
+loadMatrix();
+loadOverview();
 loadLineStatus();
-// loadMESOrders(); // Disabled - MES returns random data // Load MES orders
-setInterval(loadData, 30000);
-
-
-async function loadMESOrders() {
-    try {
-        var res = await fetch('/api/mes/orders?workshop=' + workshopCode);
-        var data = await res.json();
-        
-        if (data.success && data.count > 0) {
-            document.getElementById('pendingCount').textContent = data.count;
-            
-            var html = '';
-            for (var i = 0; i < Math.min(data.data.length, 15); i++) {
-                var o = data.data[i];
-                var pclass = o.progress >= 100 ? 'success' : (o.progress > 0 ? 'primary' : 'warning');
-                
-                html += '<div class="work-order-item">';
-                html += '<div class="d-flex justify-content-between">';
-                html += '<span class="wo-id">' + o.task_id + '</span>';
-                html += '<span class="badge bg-' + pclass + '">' + o.progress + '%</span>';
-                html += '</div>';
-                html += '<div class="wo-product mt-1">' + o.component_desc + '</div>';
-                html += '<div class="text-muted small" style="font-size:11px;">订单: ' + o.parent_order + '</div>';
-                html += '<div class="text-muted small">编码:' + o.component_code + ' | 总量:' + o.total_qty + ' | 剩余:' + o.remaining_qty + '</div>';
-                html += '</div>';
-            }
-            
-            document.getElementById('pendingOrdersList').innerHTML = html;
-            
-            // Also populate the table (工单详情)
-            var tableHtml = '';
-            for (var i = 0; i < data.data.length; i++) {
-                var o = data.data[i];
-                var statusClass = o.status === 'Completed' ? 'success' : (o.status === 'In Progress' ? 'primary' : 'warning');
-                tableHtml += '<tr>';
-                tableHtml += '<td>' + o.task_id + '</td>';
-                tableHtml += '<td>' + (o.parent_order || o.job_id || '-') + '</td>';
-                tableHtml += '<td>' + o.product_code + '</td>';
-                tableHtml += '<td>' + o.priority + '</td>';
-                tableHtml += '<td>' + o.total_qty + '</td>';
-                tableHtml += '<td><span class="badge bg-' + statusClass + '">' + o.status + '</span></td>';
-                tableHtml += '<td>' + o.remaining_qty + '</td>';
-                tableHtml += '<td>' + o.progress + '%</td>';
-                tableHtml += '</tr>';
-            }
-            document.getElementById('ordersTableBody').innerHTML = tableHtml;
-        }
-    } catch(e) {
-        console.log('MES not available');
-    }
-}
+setInterval(() => { loadMatrix(); loadOverview(); }, 30000);
 
 </script>
-
 </body>
 </html>

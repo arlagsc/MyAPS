@@ -227,8 +227,19 @@ class AdapterFactory:
     
     @classmethod
     def _load_config(cls, adapter_type: str) -> Dict:
-        return {'enabled': False}
-    
+        """从配置文件加载配置"""
+        import os
+        import json
+        # 定位到项目根目录下的 api_config.json
+        config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'api_config.json')
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+                return config.get(adapter_type, {})
+        except Exception as e:
+            logger.error(f"读取配置文件失败: {e}")
+            return {'enabled': False}
+        
     @classmethod
     def reload_config(cls):
         cls._instances['mes'] = None

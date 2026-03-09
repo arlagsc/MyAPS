@@ -35,6 +35,13 @@
 <div class="toolbar sticky-top">
     <div class="d-flex align-items-center">
         <h4 class="m-0 me-4 text-primary"><i class="fas fa-industry"></i> APS 排产看板</h4>
+        
+        <div class="btn-group me-3">
+            <a href="/dashboard/SMT" class="btn btn-outline-primary btn-sm"><i class="fas fa-microchip"></i> SMT 看板</a>
+            <a href="/dashboard/DIP" class="btn btn-outline-success btn-sm"><i class="fas fa-plug"></i> DIP 看板</a>
+            <a href="/dashboard/ASSEMBLY" class="btn btn-outline-info btn-sm"><i class="fas fa-tv"></i> 总装 看板</a>
+        </div>
+
         <button class="btn btn-outline-danger btn-sm me-2" data-bs-toggle="modal" data-bs-target="#maintenanceModal"><i class="fas fa-tools"></i> 异常/停机录入</button>
         <a href="/manage" class="btn btn-outline-dark btn-sm">⚙️ 数据管理</a>
     </div>
@@ -117,8 +124,34 @@
     function initTimeline() {
         const container = document.getElementById('visualization');
         itemsObj = new vis.DataSet([]); groupsObj = new vis.DataSet([]);
+        
+        // 计算默认视图的起止时间（明天 到 15天后）
+        let startDay = new Date();
+        startDay.setDate(startDay.getDate() + 1); // 往后推一天，从明天开始
+        startDay.setHours(0, 0, 0, 0); // 归零到明天的 00:00
+
+        let endDay = new Date(startDay);
+        endDay.setDate(startDay.getDate() + 15);
+        
+
         const options = {
-            locale: 'zh-cn', snap: null, stack: true, orientation: 'top',
+            locale: 'zh-cn', 
+            snap: null, 
+            stack: true, 
+            orientation: 'top',
+            
+            // ===== 新增：强制按天显示的核心配置 =====
+            timeAxis: { scale: 'day', step: 1 }, // 强制表头刻度为“天”
+            zoomMin: 1000 * 60 * 60 * 24 * 3,    // 限制最小缩放（防放大到小时，最少看3天）
+            zoomMax: 1000 * 60 * 60 * 24 * 60,   // 限制最大缩放（最多看2个月）
+            start: startDay,                     // 默认开启时的时间起点
+            end: endDay,                         // 默认开启时的时间终点
+            format: {
+                minorLabels: { day: 'MM/DD ddd' }, // 下层刻度显示：月/日 星期几
+                majorLabels: { day: 'YYYY年MM月' } // 上层刻度显示：年月
+            },
+            // ======================================
+
             editable: { updateGroup: true, updateTime: true },
             onMove: function (item, callback) { updateTask(item); callback(item); }
         };

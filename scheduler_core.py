@@ -41,15 +41,20 @@ def load_product_line_mapping():
 
 
 # ================= 基础调度父类 =================
-class BaseScheduler:
+class BaseScheduler:    
     def __init__(self, orders, resources):
         self.orders = orders
         self.resources = resources
-        self.resource_free_time = {r['id']: datetime.now() for r in resources}
+        
+        # [核心修改]：T+1 排产逻辑，将所有产线的初始可用时间设为明天 08:00
+        tomorrow = datetime.now() + timedelta(days=1)
+        schedule_start = tomorrow.replace(hour=8, minute=0, second=0, microsecond=0)
+        
+        self.resource_free_time = {r['id']: schedule_start for r in resources}
         self.product_line_mapping = load_product_line_mapping()
         
         # 用于记录已排产任务的时间，处理前后工序依赖 (如 B面->A面, SMT->DIP)
-        self.scheduled_timings = {} 
+        self.scheduled_timings = {}
 
     def calculate_makespan(self, schedule):
         """计算完工时间 (越小越好)"""
@@ -184,8 +189,19 @@ class BaseScheduler:
         now = datetime.now()
         
         machine_free_time = free_time.get(resource_id, now)
-        mat_time = datetime.strptime(str(task.get('material_time')), '%Y-%m-%d %H:%M') if task.get('material_time') else now
-        soft_time = datetime.strptime(str(task.get('software_time')), '%Y-%m-%d %H:%M') if task.get('software_time') else now
+        
+        # --- 强健的时间解析逻辑 (防崩溃) ---
+        def parse_time(t_str):
+            if not t_str or str(t_str).strip() in ['', '0', 'None']:
+                return now
+            try:
+                # 截取前16位，兼容各种日期格式
+                return datetime.strptime(str(t_str).strip()[:16], '%Y-%m-%d %H:%M')
+            except Exception:
+                return now
+
+        mat_time = parse_time(task.get('material_time'))
+        soft_time = parse_time(task.get('software_time'))
         
         # 基础约束
         start_time = max(now, machine_free_time, mat_time, soft_time)
@@ -223,7 +239,7 @@ class BaseScheduler:
             'std_time': std_time,
             'delay_reason': delay_reason
         }
-
+    
     def decode_schedule(self, task_sequence):
         """解码器：转化为具体时间表"""
         free_time = self.resource_free_time.copy()

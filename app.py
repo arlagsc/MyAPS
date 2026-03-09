@@ -224,6 +224,86 @@ def update_order_manual():
     conn.close()
     return jsonify({"success": True, "message": f"任务 {task_id} 已更新"})
 
+@app.route('/manage/reset', methods=['GET', 'POST'])
+def reset_data():
+    """重置系统：清空订单并从SAP同步新数据"""
+    from database import get_db_connection
+    import os
+    
+    try:
+        # 1. 清空旧订单
+        conn = get_db_connection()
+        conn.execute('DELETE FROM work_orders')
+        conn.commit()
+        
+        # 2. 从模拟 SAP 接口同步最新订单
+        from adapters.base import AdapterFactory
+        from datetime import datetime
+        
+        sap = AdapterFactory.get_sap_adapter()
+        orders = sap.get_orders_from_zpp008()
+        now = datetime.now().isoformat()
+        
+        def get_workshop(product_code):
+            if product_code in ['TV-32', 'TV-40', 'TV-55', 'TV-65', 'TV-85']:
+                return 'SMT'
+            elif product_code in ['TV-42', 'TV-50', 'PCBA-Simple']:
+                return 'DIP'
+            return 'ASSEMBLY'
+        
+        def get_component_info(product_code):
+            comp_map = {
+                'TV-32': ('C32-001', '32寸主板'),
+                'TV-40': ('C40-001', '40寸主板'),
+                'TV-42': ('C42-001', '42寸驱动板'),
+                'TV-50': ('C50-001', '50寸驱动板'),
+                'TV-55': ('C55-001', '55寸主板'),
+                'TV-65': ('C65-001', '65寸主板'),
+                'TV-75': ('C75-001', '75寸主板'),
+                'TV-85': ('C85-001', '85寸主板'),
+                'PCBA-Simple': ('PCBA-SIM-001', '简易PCBA'),
+            }
+            return comp_map.get(product_code, ('COMP-001', '通用组件'))
+        
+        saved = 0
+        for order in orders:
+            product_code = order.get('product_code', 'TV-55')
+            workshop = get_workshop(product_code)
+            comp_code, comp_desc = get_component_info(product_code)
+            
+            task_id = f"WO-{workshop[:3]}-{order.get('sales_order', '')}-{order.get('item', '')}"
+            job_id = f"JOB-{order.get('sales_order', '')}"
+            qty = order.get('qty', 100)
+            priority = order.get('priority', 3)
+            deadline = order.get('demand_date', '')
+            
+            conn.execute("""
+                INSERT INTO work_orders (
+                    task_id, job_id, product_code, resource_id, qty, std_time,
+                    priority, material_time, software_time, deadline, smt_side,
+                    related_task_id, process_req, status, planned_start, planned_end,
+                    setup_time, is_locked, plan_type, created_at, updated_at,
+                    workshop, component_code, component_desc
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                task_id, job_id, product_code, None, qty, qty * 0.1,
+                priority, '', '', deadline, 'A', None, None, 'Pending',  # <--- 注意这里：已经把 0, 0 改成了 '', ''
+                None, None, 10, 0, 'OFFICIAL', now, now,
+                workshop, comp_code, comp_desc
+            ))
+            saved += 1
+        
+        conn.commit()
+        conn.close()
+        
+        # 3. 成功后带参数重定向回配置页面
+        return redirect(url_for('config_page') + '?reset=ok&count=' + str(saved))
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return redirect(url_for('config_page') + '?reset=fail&msg=' + str(e))
+    
 # --- [阶段四核心] 新增设备保养 API ---
 @app.route('/api/maintenance', methods=['POST'])
 def add_maintenance():
@@ -248,6 +328,115 @@ def resources_page(): return render_template('resources.html')
 def config_page(): return render_template('config.html')
 @app.route('/dashboard/<workshop>')
 def dashboard_workshop(workshop): return render_template('dashboard_workshop.html', workshop_code=workshop.upper(), workshop_name=workshop.upper())
+
+# === 🛠️ 终极修复工具：同步真实的 SMT/DIP 产线基础数据 ===
+@app.route('/fix_resources')
+def fix_resources():
+    conn = get_db_connection()
+    try:
+        # 1. 清空旧的无效演示资源
+        conn.execute("DELETE FROM resources")
+        
+        # 2. 按照 PRD 生成所有真实的 SMT 线体
+        smt_lines = [f'S{i:02d}' for i in list(range(1, 50)) + [98, 99]]
+        for line in smt_lines:
+            conn.execute("INSERT INTO resources (id, name, type) VALUES (?, ?, ?)", 
+                         (line, f'SMT线-{line}', 'SMT'))
+            
+        # 3. 按照 PRD 生成所有真实的 DIP 线体
+        dip_lines = [f'D{i:02d}' for i in range(1, 23)]
+        for line in dip_lines:
+            conn.execute("INSERT INTO resources (id, name, type) VALUES (?, ?, ?)", 
+                         (line, f'DIP线-{line}', 'DIP'))
+            
+        conn.commit()
+        return "<h3>✅ 产线资源修复成功！已自动生成真实的 S01-S49 及 D01-D22 线体。</h3><a href='/manage'>👉 点击这里返回数据管理中心</a>"
+    except Exception as e:
+        return f"修复失败: {e}"
+    finally:
+        conn.close()
+
+# === 新增：车间日排产计划矩阵 API (类 Excel 视图) ===
+@app.route('/api/schedule_matrix/<workshop>')
+def schedule_matrix(workshop):
+    from datetime import datetime, timedelta
+    conn = get_db_connection()
+    
+    # 筛选该车间已排产的任务
+    if workshop == 'ALL':
+        orders = conn.execute("SELECT * FROM work_orders WHERE planned_start IS NOT NULL AND status != 'Pending' ORDER BY resource_id, planned_start").fetchall()
+    else:
+        orders = conn.execute("SELECT * FROM work_orders WHERE workshop=? AND planned_start IS NOT NULL AND status != 'Pending' ORDER BY resource_id, planned_start", (workshop,)).fetchall()
+    conn.close()
+
+    # 构建日期表头：从今天开始的 15 天
+    #today = datetime.now().date()
+    #date_list = [(today + timedelta(days=i)) for i in range(15)]
+    #date_strs = [d.strftime('%Y-%m-%d') for d in date_list]
+
+    # 构建日期表头：从明天开始的 15 天
+    tomorrow = datetime.now().date() + timedelta(days=1)
+    date_list = [(tomorrow + timedelta(days=i)) for i in range(15)]
+    date_strs = [d.strftime('%Y-%m-%d') for d in date_list]
+
+    matrix_data = []
+    for row in orders:
+        try:
+            # 【修复核心】: 将 sqlite3.Row 转换为标准字典，防止 .get() 方法报错
+            row_dict = dict(row) 
+            
+            # 解析时间
+            start_dt = datetime.strptime(str(row_dict['planned_start'])[:16].replace('T', ' '), '%Y-%m-%d %H:%M')
+            end_dt = datetime.strptime(str(row_dict['planned_end'])[:16].replace('T', ' '), '%Y-%m-%d %H:%M')
+
+            # 计算总耗时 (分钟) 和总数量
+            total_mins = max(1.0, (end_dt - start_dt).total_seconds() / 60.0)
+            qty = float(row_dict['qty'] or 0)
+
+            daily_dist = {}
+            if qty > 0:
+                d = start_dt.date()
+                end_day = end_dt.date()
+
+                # 将数量按天拆分
+                while d <= end_day:
+                    d_str = d.strftime('%Y-%m-%d')
+                    day_start = datetime.combine(d, datetime.min.time())
+                    day_end = day_start + timedelta(days=1)
+
+                    # 计算当前日期的重叠时间
+                    overlap_start = max(start_dt, day_start)
+                    overlap_end = min(end_dt, day_end)
+                    overlap_mins = max(0, (overlap_end - overlap_start).total_seconds() / 60.0)
+
+                    if overlap_mins > 0:
+                        # 按时间比例分配当天的排产数量
+                        daily_qty = int(round(qty * (overlap_mins / total_mins)))
+                        daily_dist[d_str] = daily_qty
+
+                    d += timedelta(days=1)
+
+            matrix_data.append({
+                'task_id': row_dict['task_id'],
+                'job_id': row_dict['job_id'],
+                'product_code': row_dict['product_code'],
+                'component_desc': row_dict['component_desc'] or '-',
+                'resource_id': row_dict['resource_id'] or 'AUTO',
+                'smt_side': row_dict.get('smt_side') or '-',
+                'qty': int(qty),
+                'planned_start': str(row_dict['planned_start'])[:16].replace('T', ' '),
+                'status': row_dict['status'],
+                'daily_dist': daily_dist
+            })
+        except Exception as e:
+            import traceback
+            traceback.print_exc() # 在后台打印具体的错误，防止死静
+            continue
+
+    return jsonify({
+        'dates': date_strs,
+        'orders': matrix_data
+    })
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000, host='0.0.0.0', threaded=True)
