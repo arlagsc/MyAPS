@@ -43,10 +43,10 @@ async function loadMESOrders() {
                 tableHtml += '<td>' + o.task_id + '</td>';
                 tableHtml += '<td>' + (o.parent_order || o.job_id || '-') + '</td>';
                 tableHtml += '<td>' + o.product_code + '</td>';
-                tableHtml += '<td>' + o.priority + '</td>';
+                tableHtml += '<td>-</td>';
+                tableHtml += '<td>-</td>';
                 tableHtml += '<td>' + o.total_qty + '</td>';
                 tableHtml += '<td><span class="badge bg-' + statusClass + '">' + o.status + '</span></td>';
-                tableHtml += '<td>' + o.remaining_qty + '</td>';
                 tableHtml += '<td>' + o.progress + '%</td>';
                 tableHtml += '</tr>';
             }
@@ -367,35 +367,7 @@ async function loadMESOrders() {
             </div>
         </div>
         
-        <!-- Daily Plan -->
-        <div class="col-md-6">
-            <div class="card-custom">
-                <div class="card-header">
-                    <i class="fas fa-calendar-alt me-2"></i>Future 30 Days Plan
-                </div>
-                <div class="card-body" style="max-height: 250px; overflow-y: auto;">
-                    <table class="table table-sm" id="dailyPlanTable">
-                        <thead>
-                            <tr>
-                                <th>Date</th>
-                                <th>Orders</th>
-                                <th>Qty</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody id="dailyPlanBody">
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- 工单列表 -->
+        <!-- 工单列表 -->
     <div class="row">
         <!-- 待排产工单 -->
         <div class="col-md-6">
@@ -441,6 +413,8 @@ async function loadMESOrders() {
                                 <th>产线</th>
                                 <th>状态</th>
                                 <th>截止日期</th>
+                                <th>计划开始</th>
+                                <th>计划结束</th>
                                 <th>进度</th>
                             </tr>
                         </thead>
@@ -490,10 +464,10 @@ async function loadMESOrders() {
                 tableHtml += '<td>' + o.task_id + '</td>';
                 tableHtml += '<td>' + (o.parent_order || o.job_id || '-') + '</td>';
                 tableHtml += '<td>' + o.product_code + '</td>';
-                tableHtml += '<td>' + o.priority + '</td>';
+                tableHtml += '<td>-</td>';
+                tableHtml += '<td>-</td>';
                 tableHtml += '<td>' + o.total_qty + '</td>';
                 tableHtml += '<td><span class="badge bg-' + statusClass + '">' + o.status + '</span></td>';
-                tableHtml += '<td>' + o.remaining_qty + '</td>';
                 tableHtml += '<td>' + o.progress + '%</td>';
                 tableHtml += '</tr>';
             }
@@ -576,8 +550,7 @@ async function loadData() {
         const running = orders.filter(o => o.status === 'In Progress');
         const completed = orders.filter(o => o.status === 'Completed');
         
-        // Load daily plan
-        loadDailyPlan(orders);
+        
         const urgent = pending.filter(o => {
             if (!o.deadline) return false;
             return new Date(o.deadline) - new Date() < 24 * 60 * 60 * 1000;
@@ -638,6 +611,8 @@ async function loadData() {
                 <td><strong>${o.task_id}</strong></td>
                 <td>${o.job_id || '-'}</td>
                 <td>${o.product_code || '-'}</td>
+                <td>${o.planned_start ? o.planned_start.substring(0, 16) : '-'}</td>
+                <td>${o.planned_end ? o.planned_end.substring(0, 16) : '-'}</td>
                 <td>${o.qty}</td>
                 <td><span class="badge bg-${o.priority <= 3 ? 'danger' : 'secondary'}">P${o.priority}</span></td>
                 <td>${o.resource_id || 'AUTO'}</td>
@@ -729,10 +704,10 @@ async function loadMESOrders() {
                 tableHtml += '<td>' + o.task_id + '</td>';
                 tableHtml += '<td>' + (o.parent_order || o.job_id || '-') + '</td>';
                 tableHtml += '<td>' + o.product_code + '</td>';
-                tableHtml += '<td>' + o.priority + '</td>';
+                tableHtml += '<td>-</td>';
+                tableHtml += '<td>-</td>';
                 tableHtml += '<td>' + o.total_qty + '</td>';
                 tableHtml += '<td><span class="badge bg-' + statusClass + '">' + o.status + '</span></td>';
-                tableHtml += '<td>' + o.remaining_qty + '</td>';
                 tableHtml += '<td>' + o.progress + '%</td>';
                 tableHtml += '</tr>';
             }
