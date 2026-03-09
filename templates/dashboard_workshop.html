@@ -366,6 +366,33 @@ async function loadMESOrders() {
                 </div>
             </div>
         </div>
+        
+        <!-- Daily Plan -->
+        <div class="col-md-6">
+            <div class="card-custom">
+                <div class="card-header">
+                    <i class="fas fa-calendar-alt me-2"></i>Future 30 Days Plan
+                </div>
+                <div class="card-body" style="max-height: 250px; overflow-y: auto;">
+                    <table class="table table-sm" id="dailyPlanTable">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Orders</th>
+                                <th>Qty</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dailyPlanBody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- 工单列表 -->
@@ -548,6 +575,9 @@ async function loadData() {
         const pending = orders.filter(o => o.status === 'Pending');
         const running = orders.filter(o => o.status === 'In Progress');
         const completed = orders.filter(o => o.status === 'Completed');
+        
+        // Load daily plan
+        loadDailyPlan(orders);
         const urgent = pending.filter(o => {
             if (!o.deadline) return false;
             return new Date(o.deadline) - new Date() < 24 * 60 * 60 * 1000;
