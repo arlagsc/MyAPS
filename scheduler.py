@@ -120,7 +120,9 @@ def run_advanced_scheduling(mode='OFFICIAL'):
                     logger.warning(f"解析锁定任务时间失败: {e}")
         
         # 基准时间
-        start_base = datetime.now().replace(minute=0, second=0, microsecond=0)
+        # Start from tomorrow at 8:00 AM
+tomorrow = datetime.now() + timedelta(days=1)
+start_base = tomorrow.replace(hour=8, minute=0, second=0, microsecond=0)
         
         # 待排任务筛选
         pending_df = df_orders[df_orders.get('is_locked', 0) != 1].copy()
