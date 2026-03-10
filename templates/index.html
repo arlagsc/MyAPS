@@ -12,7 +12,7 @@
     <style>
         body { background-color: #f8f9fa; }
         #visualization { background-color: white; border: 1px solid #ddd; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-        .vis-item { border-color: transparent; border-radius: 2px; font-size: 12px; color: white; display: flex; align-items: center; padding-left: 5px; }
+        .vis-item { border-color: transparent; border-radius: 2px; font-size: 12px; color: white; display: flex; align-items: center; padding-left: 5px; cursor: pointer; }
         
         .vis-item-blue { background-color: #3498db; border-left: 4px solid #2980b9; }
         .vis-item-red  { background-color: #e74c3c; border-left: 4px solid #c0392b; } 
@@ -20,11 +20,11 @@
         .vis-item-striped { background: repeating-linear-gradient(45deg,#606dbc,#606dbc 10px,#465298 10px,#465298 20px); border-left: 4px solid #333; }
         .vis-item-warning { background-color: #f39c12 !important; border-left: 5px solid #d35400 !important; color: #fff !important; }
         
-        /* 阶段四核心：严重违规报错 (A/B 面 48H) */
+        /* 严重违规报错 (A/B 面 48H) */
         .vis-item-error { background-color: #8b0000 !important; border: 2px dashed #ff4500 !important; color: #fff !important; font-weight: bold; animation: blink 1s infinite;}
         @keyframes blink { 50% { opacity: 0.7; } }
 
-        /* 阶段四核心：设备保养阴影背景 */
+        /* 设备保养阴影背景 */
         .vis-item-maintenance { background: repeating-linear-gradient(45deg, rgba(169,169,169,0.3), rgba(169,169,169,0.3) 10px, rgba(0,0,0,0.1) 10px, rgba(0,0,0,0.1) 20px) !important; border: none !important;}
 
         .toolbar { background: #fff; padding: 15px; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; }
@@ -69,6 +69,45 @@
     <div id="visualization"></div>
 </div>
 
+<div class="modal fade" id="taskEditModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="fas fa-edit"></i> 编辑排产任务</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="taskEditForm">
+                    <input type="hidden" id="edit_task_id">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">工单号 (任务ID)</label>
+                        <input type="text" class="form-control" id="edit_task_id_display" disabled>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">分配产线</label>
+                        <select class="form-select" id="edit_resource_id">
+                            {% for r in resources %}
+                            <option value="{{r.id}}">{{r.name}}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-6"><label>计划开始时间</label><input type="datetime-local" class="form-control" id="edit_start"></div>
+                        <div class="col-6"><label>计划结束时间</label><input type="datetime-local" class="form-control" id="edit_end"></div>
+                    </div>
+                    <div class="mb-3 form-check form-switch mt-4">
+                        <input class="form-check-input" type="checkbox" id="edit_is_locked" style="transform: scale(1.2); margin-left: -2em;">
+                        <label class="form-check-label fw-bold text-danger ms-2" for="edit_is_locked">手工锁定此任务 (排产算法将跳过它)</label>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="saveTaskEdit()"><i class="fas fa-save"></i> 保存修改</button>
+            </div>
+        </div>
+    </div>
+</div>
 <div class="modal fade" id="maintenanceModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -125,37 +164,50 @@
         const container = document.getElementById('visualization');
         itemsObj = new vis.DataSet([]); groupsObj = new vis.DataSet([]);
         
-        // 计算默认视图的起止时间（明天 到 15天后）
         let startDay = new Date();
-        startDay.setDate(startDay.getDate() + 1); // 往后推一天，从明天开始
-        startDay.setHours(0, 0, 0, 0); // 归零到明天的 00:00
-
+        startDay.setDate(startDay.getDate() + 1); // 从明天开始
+        startDay.setHours(0, 0, 0, 0); 
         let endDay = new Date(startDay);
         endDay.setDate(startDay.getDate() + 15);
-        
 
         const options = {
-            locale: 'zh-cn', 
-            snap: null, 
-            stack: true, 
-            orientation: 'top',
-            
-            // ===== 新增：强制按天显示的核心配置 =====
-            timeAxis: { scale: 'day', step: 1 }, // 强制表头刻度为“天”
-            zoomMin: 1000 * 60 * 60 * 24 * 3,    // 限制最小缩放（防放大到小时，最少看3天）
-            zoomMax: 1000 * 60 * 60 * 24 * 60,   // 限制最大缩放（最多看2个月）
-            start: startDay,                     // 默认开启时的时间起点
-            end: endDay,                         // 默认开启时的时间终点
-            format: {
-                minorLabels: { day: 'MM/DD ddd' }, // 下层刻度显示：月/日 星期几
-                majorLabels: { day: 'YYYY年MM月' } // 上层刻度显示：年月
-            },
-            // ======================================
-
+            locale: 'zh-cn', snap: null, stack: true, orientation: 'top',
+            timeAxis: { scale: 'day', step: 1 }, 
+            zoomMin: 1000 * 60 * 60 * 24 * 3,    
+            zoomMax: 1000 * 60 * 60 * 24 * 60,   
+            start: startDay, end: endDay,                         
+            format: { minorLabels: { day: 'MM/DD ddd' }, majorLabels: { day: 'YYYY年MM月' } },
+            maxHeight: 'calc(100vh - 120px)',
             editable: { updateGroup: true, updateTime: true },
             onMove: function (item, callback) { updateTask(item); callback(item); }
         };
         timeline = new vis.Timeline(container, itemsObj, groupsObj, options);
+
+        // ================= [新增] 监听双击事件 =================
+        timeline.on('doubleClick', function (properties) {
+            // 如果点到空白处，或点到了保养阴影(maint_)，则不触发
+            if (properties.item && !properties.item.toString().startsWith('maint_')) {
+                let item = itemsObj.get(properties.item);
+                if (!item) return;
+
+                // 填充表单数据
+                document.getElementById('edit_task_id').value = item.id;
+                document.getElementById('edit_task_id_display').value = item.id;
+                document.getElementById('edit_resource_id').value = item.group;
+                
+                // 将标准时间转换为 datetime-local 需要的格式
+                document.getElementById('edit_start').value = moment(item.start).format('YYYY-MM-DDTHH:mm');
+                document.getElementById('edit_end').value = moment(item.end).format('YYYY-MM-DDTHH:mm');
+                
+                // 还原锁定状态
+                document.getElementById('edit_is_locked').checked = item.data && item.data.is_locked === 1;
+                
+                // 呼出弹窗 (修复遮罩层残留Bug: 使用单例模式)
+                let editModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('taskEditModal'));
+                editModal.show();
+            }
+        });
+        // =======================================================
     }
 
     function loadData() {
@@ -177,6 +229,46 @@
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
         }).then(r => r.json()).then(d => loadData());
     }
+
+    // ================= [新增] 保存弹窗内的编辑内容 =================
+    window.saveTaskEdit = function() {
+        let payload = {
+            task_id: document.getElementById('edit_task_id').value,
+            resource_id: document.getElementById('edit_resource_id').value,
+            planned_start: document.getElementById('edit_start').value.replace('T', ' '),
+            planned_end: document.getElementById('edit_end').value.replace('T', ' '),
+            is_locked: document.getElementById('edit_is_locked').checked ? 1 : 0
+        };
+
+        if(!payload.planned_start || !payload.planned_end) {
+            return alert("请填写完整的计划时间！");
+        }
+        
+        fetch('/api/update_order_manual', {
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify(payload)
+        }).then(r => r.json()).then(d => {
+            if(d.success) {
+                // 关闭弹窗
+                const modalEl = document.getElementById('taskEditModal');
+                const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+                modal.hide();
+                
+                // 兜底强力清理：彻底移除所有灰色的遮罩层，恢复页面滚动
+                document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+                document.body.classList.remove('modal-open');
+                document.body.style.overflow = '';
+                document.body.style.paddingRight = '';
+
+                // 刷新甘特图数据
+                loadData();
+            } else {
+                alert("保存失败: " + d.message);
+            }
+        });
+    }
+    // ==============================================================
 
     window.runSchedule = function(mode) {
         let selectObj = document.getElementById('algoSelect');
@@ -201,7 +293,16 @@
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
         }).then(r => r.json()).then(d => {
             if(d.success) {
-                bootstrap.Modal.getInstance(document.getElementById('maintenanceModal')).hide();
+                const modalEl = document.getElementById('maintenanceModal');
+                const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+                modal.hide();
+                
+                // 兜底强力清理
+                document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+                document.body.classList.remove('modal-open');
+                document.body.style.overflow = '';
+                document.body.style.paddingRight = '';
+
                 loadData();
             } else alert("保存失败: " + d.message);
         });

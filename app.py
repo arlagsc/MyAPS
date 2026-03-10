@@ -226,57 +226,27 @@ def update_order_manual():
 
 @app.route('/manage/reset', methods=['GET', 'POST'])
 def reset_data():
-    """重置系统：清空订单并从SAP同步新数据"""
+    """重置系统：清空旧数据，并从接口获取 MES 已经拆分好的工单数据"""
     from database import get_db_connection
-    import os
+    from datetime import datetime
+    from flask import redirect, url_for
+    import traceback
     
     try:
-        # 1. 清空旧订单
+        # 1. 清空旧工单
         conn = get_db_connection()
         conn.execute('DELETE FROM work_orders')
         conn.commit()
         
-        # 2. 从模拟 SAP 接口同步最新订单
+        # 2. 从模拟 MES/SAP 接口同步已拆分好的工序级工单
         from adapters.base import AdapterFactory
-        from datetime import datetime
-        
         sap = AdapterFactory.get_sap_adapter()
-        orders = sap.get_orders_from_zpp008()
+        orders = sap.get_orders_from_zpp008() # 现在拿到的是直接可以排产的子任务
         now = datetime.now().isoformat()
-        
-        def get_workshop(product_code):
-            if product_code in ['TV-32', 'TV-40', 'TV-55', 'TV-65', 'TV-85']:
-                return 'SMT'
-            elif product_code in ['TV-42', 'TV-50', 'PCBA-Simple']:
-                return 'DIP'
-            return 'ASSEMBLY'
-        
-        def get_component_info(product_code):
-            comp_map = {
-                'TV-32': ('C32-001', '32寸主板'),
-                'TV-40': ('C40-001', '40寸主板'),
-                'TV-42': ('C42-001', '42寸驱动板'),
-                'TV-50': ('C50-001', '50寸驱动板'),
-                'TV-55': ('C55-001', '55寸主板'),
-                'TV-65': ('C65-001', '65寸主板'),
-                'TV-75': ('C75-001', '75寸主板'),
-                'TV-85': ('C85-001', '85寸主板'),
-                'PCBA-Simple': ('PCBA-SIM-001', '简易PCBA'),
-            }
-            return comp_map.get(product_code, ('COMP-001', '通用组件'))
         
         saved = 0
         for order in orders:
-            product_code = order.get('product_code', 'TV-55')
-            workshop = get_workshop(product_code)
-            comp_code, comp_desc = get_component_info(product_code)
-            
-            task_id = f"WO-{workshop[:3]}-{order.get('sales_order', '')}-{order.get('item', '')}"
-            job_id = f"JOB-{order.get('sales_order', '')}"
-            qty = order.get('qty', 100)
-            priority = order.get('priority', 3)
-            deadline = order.get('demand_date', '')
-            
+            # 3. 直接将接口传来的明细无脑入库，彻底实现系统解耦
             conn.execute("""
                 INSERT INTO work_orders (
                     task_id, job_id, product_code, resource_id, qty, std_time,
@@ -286,21 +256,20 @@ def reset_data():
                     workshop, component_code, component_desc
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
-                task_id, job_id, product_code, None, qty, qty * 0.1,
-                priority, '', '', deadline, 'A', None, None, 'Pending',  # <--- 注意这里：已经把 0, 0 改成了 '', ''
-                None, None, 10, 0, 'OFFICIAL', now, now,
-                workshop, comp_code, comp_desc
+                order.get('task_id'), order.get('job_id'), order.get('product_code'), None, 
+                order.get('qty'), order.get('std_time'), order.get('priority'), 
+                '', '', order.get('demand_date'), order.get('smt_side'), 
+                order.get('related_task_id'), None, 'Pending', None, None, 
+                10, 0, 'OFFICIAL', now, now,
+                order.get('workshop'), order.get('component_code'), order.get('component_desc')
             ))
             saved += 1
         
         conn.commit()
         conn.close()
-        
-        # 3. 成功后带参数重定向回配置页面
         return redirect(url_for('config_page') + '?reset=ok&count=' + str(saved))
         
     except Exception as e:
-        import traceback
         traceback.print_exc()
         return redirect(url_for('config_page') + '?reset=fail&msg=' + str(e))
     

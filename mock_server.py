@@ -142,29 +142,74 @@ def sap_health():
 
 @app.route('/sap/api/orders', methods=['GET'])
 def get_sap_orders():
-    """获取 ZPP008 订单数据"""
+    """获取 MES/SAP 已经拆分好的工序级工单 (Work Orders)"""
     start_date = request.args.get('start_date', (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d'))
     end_date = request.args.get('end_date', (datetime.now() + timedelta(days=30)).strftime('%Y-%m-%d'))
     
-    orders = []
-    for i in range(20):  # 生成20个订单
-        orders.append({
-            'sales_order': f'SO-{random.randint(10000, 99999)}',
-            'item': f'{random.randint(10, 90)}',
-            'product_code': random.choice(PRODUCTS),
-            'material_group': random.choice(MATERIAL_GROUPS),
-            'qty': random.randint(50, 500),
-            'demand_date': random_date(),
-            'priority': random.randint(1, 10),
-            'customer': random.choice(CUSTOMERS),
-            'company_code': random.choice(['1010', '1000', '1050']),
-            'created_at': random_time()
-        })
+    work_orders = []
     
+    # 模拟生成 30 个父订单，并由 MES 拆分为具体车间的工单
+    for i in range(30):
+        sales_order = f'SO-{random.randint(10000, 99999)}'
+        item = f'{random.randint(10, 90)}'
+        product_code = random.choice(PRODUCTS)
+        qty = random.randint(50, 500)
+        demand_date = random_date()
+        priority = random.randint(1, 10)
+        
+        is_tv = product_code.startswith('TV')
+        job_id = f"JOB-{sales_order}-{item}"
+        comp_code = f"C-{product_code}"
+        comp_desc = f"{product_code}组件"
+        
+        # --- 【MES 端的拆单逻辑】 ---
+        # 提前在 MES 端拆分好工单，并设置好前后工序依赖 (related_task_id)
+        task_b_id = f"WO-SMT-{sales_order}-{item}-B"
+        task_a_id = f"WO-SMT-{sales_order}-{item}-A"
+        task_dip_id = f"WO-DIP-{sales_order}-{item}"
+        task_asm_id = f"WO-ASM-{sales_order}-{item}"
+        
+        # 1. SMT B面 (首工序，无依赖)
+        work_orders.append({
+            'task_id': task_b_id, 'job_id': job_id, 'product_code': product_code,
+            'workshop_code': '1000SC09', 'workshop': 'SMT', 'smt_side': 'B', 
+            'qty': qty, 'std_time': qty * 0.08, 'priority': priority, 
+            'demand_date': demand_date, 'related_task_id': None,
+            'component_code': comp_code, 'component_desc': comp_desc
+        })
+        
+        # 2. SMT A面 (依赖 B面)
+        work_orders.append({
+            'task_id': task_a_id, 'job_id': job_id, 'product_code': product_code,
+            'workshop_code': '1000SC09', 'workshop': 'SMT', 'smt_side': 'A', 
+            'qty': qty, 'std_time': qty * 0.1, 'priority': priority, 
+            'demand_date': demand_date, 'related_task_id': task_b_id,
+            'component_code': comp_code, 'component_desc': comp_desc
+        })
+        
+        # 3. DIP车间 (依赖 A面)
+        work_orders.append({
+            'task_id': task_dip_id, 'job_id': job_id, 'product_code': product_code,
+            'workshop_code': '1000SC11', 'workshop': 'DIP', 'smt_side': '-', 
+            'qty': qty, 'std_time': qty * 0.15, 'priority': priority, 
+            'demand_date': demand_date, 'related_task_id': task_a_id,
+            'component_code': comp_code, 'component_desc': comp_desc
+        })
+        
+        # 4. 总装车间 (仅限 TV，依赖 DIP)
+        if is_tv:
+            work_orders.append({
+                'task_id': task_asm_id, 'job_id': job_id, 'product_code': product_code,
+                'workshop_code': '1000SC14', 'workshop': 'ASSEMBLY', 'smt_side': '-', 
+                'qty': qty, 'std_time': qty * 0.2, 'priority': priority, 
+                'demand_date': demand_date, 'related_task_id': task_dip_id,
+                'component_code': comp_code, 'component_desc': comp_desc
+            })
+
     return jsonify({
         'success': True,
-        'count': len(orders),
-        'data': orders
+        'count': len(work_orders),
+        'data': work_orders
     })
 
 
