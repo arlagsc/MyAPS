@@ -121,7 +121,10 @@
             <div class="card-custom">
                 <div class="card-header d-flex justify-content-between align-items-center" style="background:#1a2332;">
                     <span><i class="fas fa-calendar-alt me-2 text-warning"></i>生产计划矩阵表 (按天分布)</span>
-                    <button class="btn btn-sm btn-outline-success" onclick="loadMatrix()"><i class="fas fa-sync"></i> 刷新矩阵</button>
+                    <div>
+                        <button class="btn btn-sm btn-success me-2" onclick="exportExcel()"><i class="fas fa-file-excel"></i> 导出 Excel 排产单</button>
+                        <button class="btn btn-sm btn-outline-success" onclick="loadMatrix()"><i class="fas fa-sync"></i> 刷新矩阵</button>
+                    </div>
                 </div>
                 <div class="card-body p-0 table-matrix-wrapper">
                     <table class="table-matrix w-100" id="matrixTable">
@@ -284,6 +287,12 @@ async function loadLineStatus() {
         `).join('');
         document.getElementById('lineStatusGrid').innerHTML = linesHtml;
     } catch (error) {}
+}
+
+// === 一键导出 Excel ===
+function exportExcel() {
+    // 利用原生的 window.location 跳转触发文件下载，workshopCode 是您顶部定义好的变量
+    window.location.href = `/api/export_schedule_excel/${workshopCode}`;
 }
 
 // 初始化调用

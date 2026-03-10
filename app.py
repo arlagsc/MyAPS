@@ -175,8 +175,13 @@ def run_schedule():
         
         scheduler = None
         if algo == 'ga':
+            #scheduler = GeneticScheduler(orders_list, resources_list)
+            #best_schedule = scheduler.run(pop_size=50, generations=30)
+            # 激活真正的 AI：遗传算法！
+            #from scheduler_core import GeneticScheduler
             scheduler = GeneticScheduler(orders_list, resources_list)
-            best_schedule = scheduler.run(pop_size=50, generations=30)
+            # pop_size=15, generations=10 约等于在后台模拟推演了 150 次全局排产
+            best_schedule = scheduler.run(pop_size=15, generations=10)
         elif algo == 'sa':
             scheduler = SimulatedAnnealingScheduler(orders_list, resources_list)
             best_schedule = scheduler.run(initial_temp=10000)
@@ -774,6 +779,261 @@ def get_evaluation_data():
         results.append(order)
         
     return jsonify({'success': True, 'stats': stats, 'data': results})
+
+# ====================================================
+# === 新增：车间排产矩阵 Excel 一键导出 API ===
+# ====================================================
+@app.route('/api/export_schedule_excel/<workshop>')
+def export_schedule_excel(workshop):
+    """生成带有格式、冻结表头、每日明细的工业级 Excel 排产单"""
+    import io
+    from flask import send_file
+    from database import get_db_connection
+    from datetime import datetime, timedelta
+    from urllib.parse import quote
+    
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    except ImportError:
+        return "请先在终端运行 pip install openpyxl 安装 Excel 导出支持库", 500
+
+    conn = get_db_connection()
+    if workshop == 'ALL':
+        orders = conn.execute("SELECT * FROM work_orders WHERE planned_start IS NOT NULL AND status != 'Pending' ORDER BY resource_id, planned_start").fetchall()
+    else:
+        orders = conn.execute("SELECT * FROM work_orders WHERE workshop=? AND planned_start IS NOT NULL AND status != 'Pending' ORDER BY resource_id, planned_start", (workshop,)).fetchall()
+    conn.close()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = f"{workshop} 车间排产单"
+
+    # 构建日期表头：从今天开始的 15 天 (与前端矩阵保持一致)
+    today = datetime.now().date()
+    date_list = [(today + timedelta(days=i)) for i in range(15)]
+    
+    headers = ['分配产线', '工单号 (Task ID)', '产品型号', 'A/B面', '排产总数', '计划开始时间', '计划结束时间']
+    date_headers = [d.strftime('%Y-%m-%d') for d in date_list]
+    all_headers = headers + date_headers
+
+    ws.append(all_headers)
+
+    # 定义工业风 Excel 样式
+    header_fill = PatternFill(start_color="1A2332", end_color="1A2332", fill_type="solid")
+    header_font = Font(color="FFFFFF", bold=True)
+    center_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    thin_border = Border(left=Side(style='thin', color="BFBFBF"), 
+                         right=Side(style='thin', color="BFBFBF"), 
+                         top=Side(style='thin', color="BFBFBF"), 
+                         bottom=Side(style='thin', color="BFBFBF"))
+
+    # 渲染表头并设置列宽
+    for col_num, header in enumerate(all_headers, 1):
+        cell = ws.cell(row=1, column=col_num)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = center_align
+        cell.border = thin_border
+        
+        col_letter = openpyxl.utils.get_column_letter(col_num)
+        if col_num == 2: # 工单号
+            ws.column_dimensions[col_letter].width = 28
+        elif col_num in [6, 7]: # 完整时间
+            ws.column_dimensions[col_letter].width = 18
+        elif col_num > len(headers): # 日期列
+            ws.column_dimensions[col_letter].width = 12
+        else:
+            ws.column_dimensions[col_letter].width = 14
+
+    ws.row_dimensions[1].height = 25
+    # 【极致体验】冻结前 7 列和第 1 行！向右滚动看日期时，订单信息永远吸附在左侧！
+    ws.freeze_panes = 'H2' 
+
+    # 填入数据与按天摊派计算
+    for row in orders:
+        row_dict = dict(row)
+        try:
+            start_dt = datetime.strptime(str(row_dict['planned_start'])[:16].replace('T', ' '), '%Y-%m-%d %H:%M')
+            end_dt = datetime.strptime(str(row_dict['planned_end'])[:16].replace('T', ' '), '%Y-%m-%d %H:%M')
+            
+            total_mins = max(1.0, (end_dt - start_dt).total_seconds() / 60.0)
+            qty = float(row_dict['qty'] or 0)
+            
+            daily_dist = {}
+            if qty > 0:
+                d = start_dt.date()
+                end_day = end_dt.date()
+                while d <= end_day:
+                    d_str = d.strftime('%Y-%m-%d')
+                    day_start = datetime.combine(d, datetime.min.time())
+                    day_end = day_start + timedelta(days=1)
+                    
+                    overlap_start = max(start_dt, day_start)
+                    overlap_end = min(end_dt, day_end)
+                    overlap_mins = max(0, (overlap_end - overlap_start).total_seconds() / 60.0)
+                    
+                    if overlap_mins > 0:
+                        daily_dist[d_str] = int(round(qty * (overlap_mins / total_mins)))
+                    d += timedelta(days=1)
+
+            # 组装基础行数据
+            row_data = [
+                row_dict['resource_id'] or '-',
+                row_dict['task_id'],
+                row_dict['product_code'],
+                row_dict.get('smt_side') or '-',
+                int(qty),
+                str(row_dict['planned_start'])[:16],
+                str(row_dict['planned_end'])[:16]
+            ]
+            
+            # 填入按天摊派的数量
+            for d_str in date_headers:
+                row_data.append(daily_dist.get(d_str, ''))
+                
+            ws.append(row_data)
+            
+            # 渲染数据行样式
+            current_row = ws.max_row
+            for col_num in range(1, len(all_headers) + 1):
+                cell = ws.cell(row=current_row, column=col_num)
+                cell.alignment = center_align
+                cell.border = thin_border
+                
+                # 如果这一天有排产任务，给单元格打上醒目的橙色底色 (呼应您前端的 warning-color)
+                if col_num > len(headers) and cell.value != '':
+                    cell.fill = PatternFill(start_color="FDE68A", end_color="FDE68A", fill_type="solid") # 浅橙色
+                    cell.font = Font(bold=True, color="B45309") # 深橙字
+
+        except Exception as e:
+            print(f"导出处理行出错: {e}")
+            continue
+
+    # 生成文件
+    excel_io = io.BytesIO()
+    wb.save(excel_io)
+    excel_io.seek(0)
+    
+    filename = f"排产下发单_{workshop}_{today.strftime('%Y%m%d')}.xlsx"
+    
+    return send_file(
+        excel_io,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=quote(filename)
+    )
+
+# ====================================================
+# === 新增：厂长 KPI 决策大屏 API ===
+# ====================================================
+@app.route('/kpi')
+def kpi_page():
+    """渲染厂长 KPI 大屏页面"""
+    return render_template('kpi.html')
+
+@app.route('/api/kpi_data')
+def get_kpi_data():
+    """计算全局 OEE、按时交付率 (OTD) 与未来 15 天产能水位图"""
+    from database import get_db_connection
+    from datetime import datetime, timedelta
+    
+    conn = get_db_connection()
+    # 提取所有已排产的有效工单
+    orders = conn.execute("SELECT * FROM work_orders WHERE status != 'Pending' AND planned_start IS NOT NULL").fetchall()
+    resources = conn.execute("SELECT * FROM resources").fetchall()
+    conn.close()
+
+    today = datetime.now().date()
+    dates = [(today + timedelta(days=i)).strftime('%m/%d') for i in range(15)]
+    
+    # --- 1. 计算 OTD (按时交付率) ---
+    total_scheduled = len(orders)
+    on_time_count = 0
+    delayed_count = 0
+    
+    for o in orders:
+        if not o['deadline']:
+            on_time_count += 1
+            continue
+        try:
+            p_end = datetime.strptime(str(o['planned_end'])[:16].replace('T', ' '), '%Y-%m-%d %H:%M')
+            dl = datetime.strptime(str(o['deadline'])[:10], '%Y-%m-%d')
+            dl = datetime.combine(dl, datetime.max.time())
+            if p_end <= dl:
+                on_time_count += 1
+            else:
+                delayed_count += 1
+        except:
+            on_time_count += 1
+            
+    otd_rate = round(on_time_count / total_scheduled * 100, 1) if total_scheduled > 0 else 100
+
+    # --- 2. 计算未来 15 天各车间的产能负荷率 (水位图) ---
+    workshop_load_mins = {'SMT': [0]*15, 'DIP': [0]*15, 'ASSEMBLY': [0]*15}
+    
+    for o in orders:
+        ws = o['workshop']
+        if ws not in workshop_load_mins: continue
+        try:
+            start_dt = datetime.strptime(str(o['planned_start'])[:16].replace('T', ' '), '%Y-%m-%d %H:%M')
+            end_dt = datetime.strptime(str(o['planned_end'])[:16].replace('T', ' '), '%Y-%m-%d %H:%M')
+            
+            d = start_dt.date()
+            while d <= end_dt.date():
+                day_idx = (d - today).days
+                if 0 <= day_idx < 15:
+                    day_start = datetime.combine(d, datetime.min.time())
+                    day_end = day_start + timedelta(days=1)
+                    overlap_start = max(start_dt, day_start)
+                    overlap_end = min(end_dt, day_end)
+                    overlap_mins = max(0, (overlap_end - overlap_start).total_seconds() / 60.0)
+                    workshop_load_mins[ws][day_idx] += overlap_mins
+                d += timedelta(days=1)
+        except: pass
+
+    # 统计每个车间的标准总产能 (假设每天单线满载排班 12 小时 = 720 分钟)
+    ws_lines = {'SMT': 0, 'DIP': 0, 'ASSEMBLY': 0}
+    for r in resources:
+        ws = r.get('workshop')
+        # 兼容总装车间的判断
+        if ws in ws_lines: ws_lines[ws] += 1
+        elif r['type'] == 'Production': ws_lines['ASSEMBLY'] += 1
+            
+    series_data = []
+    # 转换为百分比负荷率，构建前端 ECharts 所需格式
+    for ws, daily_mins in workshop_load_mins.items():
+        max_capacity_mins = max(ws_lines[ws] * 720, 1) # 避免除 0 报错
+        percent_loads = [round((m / max_capacity_mins) * 100, 1) for m in daily_mins]
+        
+        # 配色方案
+        color = '#238636' if ws == 'SMT' else ('#1f6feb' if ws == 'DIP' else '#d97706')
+        
+        series_data.append({
+            'name': f'{ws}车间',
+            'type': 'line',
+            'smooth': True,
+            'symbol': 'circle',
+            'symbolSize': 8,
+            'itemStyle': {'color': color},
+            'areaStyle': {
+                'color': {
+                    'type': 'linear', 'x': 0, 'y': 0, 'x2': 0, 'y2': 1,
+                    'colorStops': [{'offset': 0, 'color': color}, {'offset': 1, 'color': 'transparent'}]
+                },
+                'opacity': 0.3
+            },
+            'data': percent_loads
+        })
+        
+    return jsonify({
+        'success': True,
+        'otd_rate': otd_rate,
+        'total_orders': total_scheduled,
+        'delayed_count': delayed_count,
+        'dates': dates,
+        'load_series': series_data
+    })
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000, host='0.0.0.0', threaded=True)

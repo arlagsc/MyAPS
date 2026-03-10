@@ -424,19 +424,181 @@ class SimulatedAnnealingScheduler(BaseScheduler):
             temp *= cooling_rate
         return self.decode_schedule(best_seq)
 
+# ====================================================
+# === 真正的 AI 引擎：遗传算法 (Genetic Algorithm) ===
+# ====================================================
 class GeneticScheduler(BaseScheduler):
-    def run(self, pop_size=50, generations=50, mutation_rate=0.1):
-        base_ids = [o['task_id'] for o in self.orders]
-        population = [random.sample(base_ids, len(base_ids)) for _ in range(pop_size)]
+    def run(self, pop_size=15, generations=10):
+        """
+        执行遗传算法优化
+        pop_size: 种群大小 (每代多少个排产方案)
+        generations: 进化代数
+        """
+        print(f"\n[AI 算力启动] 正在进行遗传算法寻优 (种群:{pop_size}, 迭代:{generations}代)...")
         
+        # 1. 初始化种群 (每个个体是一个包含索引的数组，代表工单的排产顺序)
+        base_indices = list(range(len(self.orders)))
+        
+        # 放入一个“贪婪算法”的最优解作为种子 (精英主义)
+        elite_seq = sorted(base_indices, key=lambda i: (
+            self.orders[i].get('priority', 5), 
+            self.orders[i].get('deadline', '9999-12-31')
+        ))
+        
+        population = [elite_seq]
+        for _ in range(pop_size - 1):
+            ind = elite_seq.copy()
+            # 引入随机变异打乱顺序
+            random.shuffle(ind)
+            population.append(ind)
+            
+        best_schedule = None
+        best_fitness = -float('inf')
+        
+        # 2. 进化循环
         for gen in range(generations):
-            scored_pop = sorted([(self.calculate_makespan(self.decode_schedule(ind)), ind) for ind in population], key=lambda x: x[0])
-            new_pop = [x[1] for x in scored_pop[:max(1, int(pop_size * 0.2))]]
+            fitness_scores = []
+            schedules = []
+            
+            # 评估当前种群的每一个方案
+            for ind in population:
+                sched, fit = self._decode_and_evaluate(ind)
+                fitness_scores.append(fit)
+                schedules.append(sched)
+                
+                # 记录历史最优
+                if fit > best_fitness:
+                    best_fitness = fit
+                    best_schedule = sched
+                    
+            # 3. 繁衍下一代 (选择、交叉、突变)
+            new_pop = []
+            # 保留本代最优 (精英保留策略)
+            elite_index = fitness_scores.index(max(fitness_scores))
+            new_pop.append(population[elite_index])
+            
             while len(new_pop) < pop_size:
-                child = random.choice(scored_pop[:max(1, int(pop_size * 0.5))])[1][:]
-                if random.random() < mutation_rate:
-                    i1, i2 = random.sample(range(len(child)), 2)
-                    child[i1], child[i2] = child[i2], child[i1]
+                # 锦标赛选择
+                p1 = population[self._tournament(fitness_scores)]
+                p2 = population[self._tournament(fitness_scores)]
+                
+                # 顺序交叉 (Order Crossover - OX1)
+                child = self._crossover(p1, p2)
+                
+                # 随机突变 (Swap Mutation)
+                self._mutate(child)
                 new_pop.append(child)
+                
             population = new_pop
-        return self.decode_schedule(population[0])
+            print(f"  > 第 {gen+1} 代最优适应度分数: {max(fitness_scores)}")
+            
+        print(f"[AI 算力完成] 最终取得最优适应度分数: {best_fitness}\n")
+        return best_schedule
+
+    def _tournament(self, fitness_scores, k=3):
+        """锦标赛选择法：随机抽k个，选最好的"""
+        best_idx = random.randint(0, len(fitness_scores) - 1)
+        for _ in range(k - 1):
+            idx = random.randint(0, len(fitness_scores) - 1)
+            if fitness_scores[idx] > fitness_scores[best_idx]:
+                best_idx = idx
+        return best_idx
+
+    def _crossover(self, p1, p2):
+        """顺序交叉 (OX1)，保证工单不会重复或遗漏"""
+        size = len(p1)
+        child = [-1] * size
+        a, b = sorted([random.randint(0, size - 1), random.randint(0, size - 1)])
+        
+        # 复制 p1 的片段
+        child[a:b+1] = p1[a:b+1]
+        
+        # 填补 p2 的剩余基因
+        p2_filtered = [x for x in p2 if x not in child]
+        idx = 0
+        for i in range(size):
+            if child[i] == -1:
+                child[i] = p2_filtered[idx]
+                idx += 1
+        return child
+
+    def _mutate(self, child, mutation_rate=0.2):
+        """两点交换突变"""
+        if random.random() < mutation_rate:
+            a, b = random.randint(0, len(child)-1), random.randint(0, len(child)-1)
+            child[a], child[b] = child[b], child[a]
+
+    def _decode_and_evaluate(self, individual):
+        """
+        核心评估大脑：根据给定的基因(工单顺序)进行模拟排产，并打分！
+        """
+        # 每次评估前，重置产线状态
+        res_free_time = {r['id']: self.schedule_start for r in self.resources}
+        sched_timings = {}
+        schedule_result = []
+        
+        total_delay_hours = 0
+        debounce_violations = 0
+        max_end_time = self.schedule_start
+        
+        # 按照基因序列进行贪婪装载
+        for idx in individual:
+            order = self.orders[idx]
+            
+            dep_end_time = self.schedule_start
+            if order.get('depends_on') and order['depends_on'] in sched_timings:
+                dep_end_time = sched_timings[order['depends_on']]
+                
+            allowed = self.get_allowed_resources(order)
+            if not allowed: continue
+                
+            best_res = None
+            best_start = None
+            is_violated = False
+            
+            for res in allowed:
+                calc_start = max(res_free_time.get(res['id'], self.schedule_start), dep_end_time)
+                # 调用我们在阶段三写的防抖引擎
+                adjusted_start, violated = apply_debounce_rules(order, calc_start, self.schedule_start)
+                
+                if best_start is None or adjusted_start < best_start:
+                    best_start = adjusted_start
+                    best_res = res['id']
+                    is_violated = violated
+                    
+            if best_res:
+                std_time_mins = float(order.get('std_time', 60))
+                best_end = best_start + timedelta(minutes=std_time_mins)
+                
+                res_free_time[best_res] = best_end
+                sched_timings[order['task_id']] = best_end
+                if best_end > max_end_time: max_end_time = best_end
+                
+                # 记录防抖违规次数 (这是严重惩罚项)
+                if is_violated: debounce_violations += 1
+                
+                # 计算逾期延误时间 (惩罚项)
+                deadline_str = order.get('deadline')
+                if deadline_str:
+                    try:
+                        dl = datetime.strptime(str(deadline_str)[:10], '%Y-%m-%d').date()
+                        dl_dt = datetime.combine(dl, datetime.max.time())
+                        if best_end > dl_dt:
+                            total_delay_hours += (best_end - dl_dt).total_seconds() / 3600
+                    except: pass
+                
+                schedule_result.append({
+                    'task_id': order['task_id'],
+                    'resource_id': best_res,
+                    'planned_start': best_start,
+                    'planned_end': best_end,
+                    'violated': is_violated
+                })
+                
+        # === 适应度计算 (Fitness) ===
+        # 分数越高越好，所以惩罚项使用负数。
+        # 防抖违规是“死罪”(权重极高)，延期交付是“重罪”(权重中等)，总耗时越短越好(权重低，作为破局条件)
+        makespan_hours = (max_end_time - self.schedule_start).total_seconds() / 3600
+        fitness = -(debounce_violations * 10000) - (total_delay_hours * 100) - makespan_hours
+        
+        return schedule_result, fitness

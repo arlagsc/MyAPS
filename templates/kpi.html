@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>厂长 KPI 决策大屏 - MyAPS</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
+    <style>
+        :root { --bg-dark: #0d1117; --bg-card: #161b22; --border-color: #30363d; --text-primary: #e6edf3; }
+        body { background-color: var(--bg-dark); color: var(--text-primary); font-family: -apple-system, sans-serif; }
+        .navbar-custom { background: linear-gradient(90deg, #1a1a2e 0%, #16213e 100%); padding: 15px 20px; border-bottom: 1px solid var(--border-color);}
+        .card-custom { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
+        .card-header { border-bottom: 1px solid var(--border-color); padding: 15px 20px; font-weight: bold; background: transparent;}
+        .kpi-title { font-size: 14px; color: #8b949e; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 1px;}
+        .kpi-value { font-size: 42px; font-weight: 800; font-family: 'Courier New', Courier, monospace;}
+    </style>
+</head>
+<body>
+
+<nav class="navbar-custom d-flex justify-content-between align-items-center">
+    <div class="d-flex align-items-center">
+        <a href="/" class="btn btn-outline-secondary btn-sm me-3"><i class="fas fa-arrow-left"></i> 返回甘特图</a>
+        <h4 class="mb-0 text-white"><i class="fas fa-chart-line me-2 text-info"></i>厂长 KPI 决策大屏</h4>
+    </div>
+    <div class="text-end text-muted small" id="clock"></div>
+</nav>
+
+<div class="container-fluid p-4">
+    <div class="row">
+        <div class="col-md-4">
+            <div class="card-custom p-4 text-center">
+                <div class="kpi-title"><i class="fas fa-check-circle text-success me-2"></i>全局按期交付率 (OTD)</div>
+                <div class="kpi-value text-success" id="valOtd">--%</div>
+                <div class="text-muted small mt-2">基于 AI 模拟排产后的理论交付率</div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card-custom p-4 text-center">
+                <div class="kpi-title"><i class="fas fa-tasks text-info me-2"></i>已排产工单总量</div>
+                <div class="kpi-value text-info" id="valTotal">--</div>
+                <div class="text-muted small mt-2">占据未来 15 天产能分布</div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card-custom p-4 text-center">
+                <div class="kpi-title"><i class="fas fa-exclamation-triangle text-danger me-2"></i>交付逾期/违规预警</div>
+                <div class="kpi-value text-danger" id="valDelayed">--</div>
+                <div class="text-muted small mt-2">需人工介入或销售协调的订单数</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-2">
+        <div class="col-md-8">
+            <div class="card-custom">
+                <div class="card-header"><i class="fas fa-water text-primary me-2"></i>未来 15 天车间产能水位负荷分析</div>
+                <div class="card-body">
+                    <div id="chartLoad" style="width: 100%; height: 400px;"></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card-custom h-100">
+                <div class="card-header"><i class="fas fa-tachometer-alt text-warning me-2"></i>交付健康度诊断</div>
+                <div class="card-body d-flex justify-content-center align-items-center">
+                    <div id="chartGauge" style="width: 100%; height: 350px;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 时间刷新
+    setInterval(() => document.getElementById('clock').innerText = new Date().toLocaleString(), 1000);
+
+    // 初始化 ECharts
+    const chartLoad = echarts.init(document.getElementById('chartLoad'), 'dark');
+    const chartGauge = echarts.init(document.getElementById('chartGauge'), 'dark');
+
+    // 图表自适应
+    window.addEventListener('resize', () => { chartLoad.resize(); chartGauge.resize(); });
+
+    // 加载并渲染数据
+    fetch('/api/kpi_data')
+        .then(res => res.json())
+        .then(data => {
+            if(!data.success) return;
+
+            // 更新数字
+            document.getElementById('valOtd').innerText = data.otd_rate + '%';
+            document.getElementById('valTotal').innerText = data.total_orders;
+            document.getElementById('valDelayed').innerText = data.delayed_count;
+
+            // 1. 渲染产能水位图 (折线面积图)
+            chartLoad.setOption({
+                backgroundColor: 'transparent',
+                tooltip: { trigger: 'axis', formatter: function(params) {
+                    let html = params[0].axisValue + '<br>';
+                    params.forEach(p => { html += `${p.marker} ${p.seriesName}: <b style="color:${p.color}">${p.value}%</b><br>`; });
+                    return html;
+                }},
+                legend: { data: ['SMT车间', 'DIP车间', 'ASSEMBLY车间'], textStyle: { color: '#8b949e' } },
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                xAxis: { type: 'category', boundaryGap: false, data: data.dates, axisLine: { lineStyle: { color: '#30363d' } } },
+                yAxis: { type: 'value', name: '产能负荷率(%)', max: 120, splitLine: { lineStyle: { color: '#30363d', type: 'dashed' } } },
+                series: data.load_series,
+                // 增加水位预警线
+                markLine: {
+                    symbol: 'none',
+                    data: [
+                        { yAxis: 85, name: '健康上限', lineStyle: { color: '#f1c40f', type: 'dashed' } },
+                        { yAxis: 100, name: '爆单红线', lineStyle: { color: '#e74c3c', type: 'solid', width: 2 } }
+                    ]
+                }
+            });
+
+            // 2. 渲染 OTD 仪表盘
+            chartGauge.setOption({
+                backgroundColor: 'transparent',
+                series: [{
+                    type: 'gauge',
+                    startAngle: 180, endAngle: 0,
+                    min: 0, max: 100,
+                    splitNumber: 10,
+                    itemStyle: { color: data.otd_rate >= 90 ? '#238636' : (data.otd_rate >= 75 ? '#d97706' : '#e74c3c') },
+                    progress: { show: true, width: 30 },
+                    pointer: { show: false },
+                    axisLine: { lineStyle: { width: 30 } },
+                    axisTick: { show: false },
+                    splitLine: { show: false },
+                    axisLabel: { show: false },
+                    detail: {
+                        valueAnimation: true,
+                        fontSize: 45,
+                        offsetCenter: [0, '20%'],
+                        formatter: '{value}%',
+                        color: '#e6edf3'
+                    },
+                    data: [{ value: data.otd_rate, name: 'OTD 交付率' }],
+                    title: { offsetCenter: [0, '-30%'], color: '#8b949e', fontSize: 14 }
+                }]
+            });
+        });
+</script>
+</body>
+</html>
