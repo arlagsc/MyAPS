@@ -28,6 +28,9 @@
         .vis-item-maintenance { background: repeating-linear-gradient(45deg, rgba(169,169,169,0.3), rgba(169,169,169,0.3) 10px, rgba(0,0,0,0.1) 10px, rgba(0,0,0,0.1) 20px) !important; border: none !important;}
 
         .toolbar { background: #fff; padding: 15px; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; }
+
+        /* 防抖违规报错 (被迫大幅延期) */
+        .vis-item-debounce { background-color: #8e44ad !important; border: 2px dashed #ff00ff !important; color: #fff !important; }
     </style>
 </head>
 <body>
@@ -35,21 +38,22 @@
 <div class="toolbar sticky-top">
     <div class="d-flex align-items-center">
         <h4 class="m-0 me-4 text-primary"><i class="fas fa-industry"></i> APS 排产看板</h4>
-        
         <div class="btn-group me-3">
             <a href="/dashboard/SMT" class="btn btn-outline-primary btn-sm"><i class="fas fa-microchip"></i> SMT 看板</a>
             <a href="/dashboard/DIP" class="btn btn-outline-success btn-sm"><i class="fas fa-plug"></i> DIP 看板</a>
             <a href="/dashboard/ASSEMBLY" class="btn btn-outline-info btn-sm"><i class="fas fa-tv"></i> 总装 看板</a>
         </div>
 
-        <button class="btn btn-outline-danger btn-sm me-2" data-bs-toggle="modal" data-bs-target="#maintenanceModal"><i class="fas fa-tools"></i> 异常/停机录入</button>
-        <a href="/manage" class="btn btn-outline-dark btn-sm">⚙️ 数据管理</a>
+        <a href="/evaluation" class="btn btn-outline-success btn-sm me-2"><i class="fas fa-search-dollar"></i> 交期评估</a> <button class="btn btn-outline-danger btn-sm me-2" data-bs-toggle="modal" data-bs-target="#maintenanceModal"><i class="fas fa-tools"></i> 停机录入</button>
+        <a href="/manage" class="btn btn-outline-dark btn-sm me-2">⚙️ 数据管理</a>
+        <a href="/config" class="btn btn-outline-secondary btn-sm">🛠️ 系统配置</a>
     </div>
     <div>
         <div class="text-muted small mb-1 text-end">
             <span class="badge bg-secondary">■ 锁定</span> 
             <span class="badge bg-warning text-dark">■ 时间不足</span> 
             <span class="badge" style="background:#8b0000">■ 违反时序约束</span>
+            <span class="badge" style="background:#8e44ad">■ 防抖违规(重排跨度过大)</span> 
             <span class="badge" style="background:#ccc; color:#333;">▧ 设备停机</span>
         </div>
         <div class="input-group input-group-sm d-inline-flex w-auto me-2">

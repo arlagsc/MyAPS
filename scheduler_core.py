@@ -39,7 +39,50 @@ def load_product_line_mapping():
         logger.error(f"加载产品-产线映射失败: {e}")
         return {}
 
-
+##防抖判定规则
+def apply_debounce_rules(order, current_calc_start, schedule_baseline):
+    """
+    【核心防抖引擎】
+    输入：订单原数据, 算法初步算出的开始时间, 本次排产的基准时间(T+1)
+    输出：(修正后的开始时间, 是否严重违规)
+    """
+    orig_start_str = order.get('planned_start')
+    # 如果是第一次排产（没有原计划），直接放行
+    if not orig_start_str or str(orig_start_str) in ('None', 'null', ''):
+        return current_calc_start, False
+    
+    try:
+        orig_start = datetime.strptime(str(orig_start_str)[:16].replace('T', ' '), '%Y-%m-%d %H:%M')
+        # 计算原计划属于第几天（相对 T+1）
+        days_diff = (orig_start.date() - schedule_baseline.date()).days
+        
+        min_start, max_start = None, None
+        
+        # 规则 1：第 3-7 天，调整不可超过 3 天
+        if 3 <= days_diff <= 7:
+            min_start = orig_start - timedelta(days=3)
+            max_start = orig_start + timedelta(days=3)
+        # 规则 2：第 8-15 天，调整不可超过 7 天
+        elif 8 <= days_diff <= 15:
+            min_start = orig_start - timedelta(days=7)
+            max_start = orig_start + timedelta(days=7)
+        else:
+            return current_calc_start, False # 不在防抖保护区间（比如 0-2天已被冻结）
+            
+        # --- 强制约束判定 ---
+        if current_calc_start < min_start:
+            # 算得太早了！强行压制，不允许过度提前，以免打乱近期物料计划
+            return min_start, False
+        elif current_calc_start > max_start:
+            # 算得太晚了！(产能实在排不开被挤爆了)，此时只能违背约束，但必须向上层报警！
+            return current_calc_start, True
+        else:
+            # 在合理浮动区间内，完美放行
+            return current_calc_start, False
+            
+    except Exception:
+        return current_calc_start, False
+    
 # ================= 基础调度父类 =================
 class BaseScheduler:    
     def __init__(self, orders, resources):
@@ -50,11 +93,42 @@ class BaseScheduler:
         tomorrow = datetime.now() + timedelta(days=1)
         schedule_start = tomorrow.replace(hour=8, minute=0, second=0, microsecond=0)
         
+        # === 【紧急修复】将基准时间存入 self，供防抖引擎调用 ===
+        self.schedule_start = schedule_start 
+        # ===================================================
+        
         self.resource_free_time = {r['id']: schedule_start for r in resources}
         self.product_line_mapping = load_product_line_mapping()
-        
-        # 用于记录已排产任务的时间，处理前后工序依赖 (如 B面->A面, SMT->DIP)
         self.scheduled_timings = {}
+
+    # =========================================================
+    # === 【紧急补全】产线筛选引擎 (包含 PRD 强弱约束规则) ===
+    # =========================================================
+    def get_allowed_resources(self, order):
+        allowed = []
+        workshop = order.get('workshop')
+        product_code = order.get('product_code')
+        smt_side = order.get('smt_side', '-')
+
+        for r in self.resources:
+            # 1. 基础约束：车间必须匹配 (SMT单找SMT线，DIP找DIP线)
+            if workshop and r.get('workshop') and r['workshop'] != workshop:
+                continue
+                
+            # 2. 强绑定约束：检查产品是否有专属绑定的产线
+            if product_code in self.product_line_mapping:
+                if r['id'] not in self.product_line_mapping[product_code]:
+                    continue
+                    
+            # 3. 工艺约束 (PRD落地)：S27-S30 专做 B 面
+            if r['id'] in ['S27', 'S28', 'S29', 'S30']:
+                if smt_side not in ['B', 'B面', 'Back']:
+                    continue
+                    
+            allowed.append(r)
+            
+        return allowed
+    # =========================================================
 
     def calculate_makespan(self, schedule):
         """计算完工时间 (越小越好)"""
@@ -274,8 +348,57 @@ class BaseScheduler:
 # ================= 后续算法类 (Greedy, SA, GA 等) 保持原样 =================
 class GreedyScheduler(BaseScheduler):
     def run(self):
-        sorted_orders = sorted(self.orders, key=lambda x: (x.get('priority', 0), x.get('std_time', 0)))
-        return self.decode_schedule([o['task_id'] for o in sorted_orders])
+        schedule_result = []
+        # 按优先级和交期初步排序
+        sorted_orders = sorted(self.orders, key=lambda x: (x.get('priority', 5), x.get('deadline', '9999-12-31')))
+        
+        for order in sorted_orders:
+            # 1. 处理级联依赖 (B面 -> A面 -> DIP)
+            dep_end_time = self.schedule_start
+            if order.get('depends_on'):
+                dep_id = order['depends_on']
+                if dep_id in self.scheduled_timings:
+                    dep_end_time = self.scheduled_timings[dep_id]
+            
+            # 2. 筛选可用产线
+            allowed_resources = self.get_allowed_resources(order)
+            if not allowed_resources: continue
+                
+            best_resource = None
+            best_start = None
+            best_end = None
+            is_violated = False
+            
+            # 3. 寻找最优产线并【过防抖引擎】
+            for res in allowed_resources:
+                res_id = res['id']
+                calc_start = max(self.resource_free_time.get(res_id, self.schedule_start), dep_end_time)
+                
+                # ==== 调用防抖引擎 ====
+                adjusted_start, violated = apply_debounce_rules(order, calc_start, self.schedule_start)
+                
+                if best_start is None or adjusted_start < best_start:
+                    best_start = adjusted_start
+                    best_resource = res_id
+                    is_violated = violated
+                    
+            # 4. 锁定排产结果
+            if best_resource:
+                std_time_mins = float(order.get('std_time', 60))
+                best_end = best_start + timedelta(minutes=std_time_mins)
+                
+                self.resource_free_time[best_resource] = best_end
+                self.scheduled_timings[order['task_id']] = best_end
+                
+                schedule_result.append({
+                    'task_id': order['task_id'],
+                    'resource_id': best_resource,
+                    'planned_start': best_start,
+                    'planned_end': best_end,
+                    'violated': is_violated # 传出防抖违规报警
+                })
+                
+        return schedule_result
 
 class SimulatedAnnealingScheduler(BaseScheduler):
     def run(self, initial_temp=1000, cooling_rate=0.95, min_temp=1, max_iterations=1000):

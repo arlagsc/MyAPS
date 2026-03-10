@@ -49,7 +49,7 @@ def get_gantt_data():
         SELECT w.*, r.name as res_name 
         FROM work_orders w
         JOIN resources r ON w.resource_id = r.id
-        WHERE w.status IN ('Scheduled', 'Delayed') 
+        WHERE w.status IN ('Scheduled', 'Delayed', 'Warning-Debounce') 
            OR w.status LIKE 'Scheduled%' 
            OR w.status LIKE 'Delayed%'
     """).fetchall()
@@ -125,6 +125,11 @@ def get_gantt_data():
         elif is_time_insufficient:
             className = 'vis-item-warning'
             content_html = f"⚠️ {row['task_id']} <small>({int(duration_min)}/{int(std_time)}m)</small>"
+        # ===== [新增] 防抖违规警报 =====
+        elif row['status'] == 'Warning-Debounce':
+            className = 'vis-item-debounce'
+            content_html = f"🔄 {row['task_id']} <small>(防抖超限)</small>"
+        # ==============================
         elif row['status'].startswith('Delayed') or '⚠️' in row['status']:
             className = 'vis-item-red'
         elif row['is_locked']:
@@ -182,7 +187,9 @@ def run_schedule():
         for item in best_schedule:
             s_str = item['planned_start'].strftime('%Y-%m-%d %H:%M')
             e_str = item['planned_end'].strftime('%Y-%m-%d %H:%M')
-            status = 'Scheduled'
+            
+            # 【防抖违规捕获】：如果打破了 3天/7天 的约束，标记为专属状态
+            status = 'Warning-Debounce' if item.get('violated') else 'Scheduled'
             
             conn.execute("""
                 UPDATE work_orders 
@@ -406,6 +413,367 @@ def schedule_matrix(workshop):
         'dates': date_strs,
         'orders': matrix_data
     })
+
+# ====================================================
+# === 新增：工厂日历管理 API (支持 CSV 导入导出) ===
+# ====================================================
+# ====================================================
+# === 修复版：工厂日历管理 API (自带动态建表功能) ===
+# ====================================================
+def init_calendar_table(conn):
+    """自动创建日历表（如果不存在的话）"""
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS factory_calendar (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            workshop_code TEXT,
+            workshop_name TEXT,
+            calendar_date TEXT,
+            is_workday INTEGER,
+            work_start_time TEXT,
+            work_end_time TEXT,
+            notes TEXT,
+            UNIQUE(workshop_code, calendar_date)
+        )
+    ''')
+
+@app.route('/api/calendar/list')
+def get_calendar_list():
+    """获取日历列表"""
+    from database import get_db_connection
+    workshop = request.args.get('workshop', 'SMT')
+    
+    conn = get_db_connection()
+    init_calendar_table(conn)
+    rows = conn.execute("SELECT * FROM factory_calendar WHERE workshop_code=? ORDER BY calendar_date", (workshop,)).fetchall()
+    conn.close()
+    
+    return jsonify([dict(r) for r in rows])
+
+@app.route('/api/calendar/generate', methods=['POST'])
+def generate_calendar():
+    """一键生成默认日历 (极致兼容版 + 详细Debug日志)"""
+    from database import get_db_connection
+    from datetime import datetime, timedelta
+    from flask import request, jsonify
+    import traceback
+    
+    print("\n=== [DEBUG] 开始处理 generate_calendar 请求 ===")
+    print("Content-Type:", request.content_type)
+    print("Raw Data (原始数据):", request.data)
+    
+    try:
+        # 1. 安全获取参数
+        data = request.get_json(force=True, silent=True) or {}
+        print("Parsed JSON (解析后字典):", data)
+        
+        workshop = data.get('workshop', 'SMT')
+        days = int(data.get('days', 30))
+        
+        ws_names = {'SMT': 'SMT车间', 'DIP': 'DIP车间', 'ASSEMBLY': '总装车间'}
+        ws_name = ws_names.get(workshop, workshop)
+        
+        # 2. 连接数据库
+        print(f"正在连接数据库，准备生成 {ws_name} 的 {days} 天日历...")
+        conn = get_db_connection()
+        init_calendar_table(conn)
+        print("表结构初始化检查通过。")
+        
+        # 3. 生成数据
+        start_date = datetime.now().date()
+        for i in range(days):
+            cur_date = start_date + timedelta(days=i)
+            date_str = cur_date.strftime('%Y-%m-%d')
+            is_weekend = cur_date.weekday() >= 5
+            
+            is_workday = 0 if is_weekend else 1
+            notes = '周末休息' if is_weekend else '正常上班'
+            
+            # 【核心兼容性修复】：放弃 ON CONFLICT，改用先删后插，兼容所有旧版 SQLite
+            conn.execute('DELETE FROM factory_calendar WHERE workshop_code=? AND calendar_date=?', (workshop, date_str))
+            
+            conn.execute('''
+                INSERT INTO factory_calendar 
+                (workshop_code, workshop_name, calendar_date, is_workday, work_start_time, work_end_time, notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (workshop, ws_name, date_str, is_workday, '08:00', '20:00', notes))
+            
+        conn.commit()
+        conn.close()
+        print("=== [DEBUG] 数据生成并保存成功！ ===\n")
+        return jsonify({'success': True, 'message': f'成功生成 {ws_name} 未来 {days} 天的日历'})
+        
+    except Exception as e:
+        print("=== [DEBUG] 发生严重异常！ ===")
+        traceback.print_exc() # 打印完整的报错堆栈到终端
+        print("==============================\n")
+        return jsonify({'success': False, 'message': f'后端报错: {str(e)}'})
+
+# === 彻底防冲突的新导出路由 ===
+@app.route('/api/calendar/download_csv')
+def download_calendar_csv():
+    """导出为 CSV (全新防冲突路由)"""
+    from database import get_db_connection
+    import csv, io
+    from flask import Response, request
+    
+    workshop = request.args.get('workshop', 'SMT')
+    conn = get_db_connection()
+    
+    # 确保表存在，防止报错
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS factory_calendar (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            workshop_code TEXT, workshop_name TEXT, calendar_date TEXT,
+            is_workday INTEGER, work_start_time TEXT, work_end_time TEXT, notes TEXT,
+            UNIQUE(workshop_code, calendar_date)
+        )
+    ''')
+    
+    rows = conn.execute("SELECT * FROM factory_calendar WHERE workshop_code=? ORDER BY calendar_date", (workshop,)).fetchall()
+    conn.close()
+    
+    si = io.StringIO()
+    cw = csv.writer(si)
+    # 写入表头
+    cw.writerow(['workshop_code', 'workshop_name', 'calendar_date', 'is_workday', 'work_start_time', 'work_end_time', 'notes'])
+    for row in rows:
+        cw.writerow([row['workshop_code'], row['workshop_name'], row['calendar_date'], 
+                     row['is_workday'], row['work_start_time'], row['work_end_time'], row['notes']])
+    
+    # 加上 utf-8-sig (BOM头) 防止 Excel 打开中文乱码
+    output = si.getvalue().encode('utf-8-sig') 
+    return Response(output, mimetype='text/csv', headers={'Content-Disposition': f'attachment;filename=calendar_{workshop}.csv'})
+
+# === 彻底防冲突的新导入路由 (强化 WPS/Excel 编码清洗 + 日期防篡改) ===
+# === 带有强力 DEBUG 日志的 CSV 导入路由 ===
+@app.route('/api/calendar/upload_csv', methods=['POST'])
+def upload_calendar_csv():
+    from database import get_db_connection
+    import csv, io
+    from flask import request, jsonify
+    import traceback
+    
+    print("\n" + "="*50)
+    print("=== [DEBUG] 开始处理 CSV 导入 ===")
+    
+    if 'file' not in request.files:
+        print("[DEBUG] 失败：未找到上传的文件")
+        return jsonify({'success': False, 'message': '未找到文件'})
+        
+    file = request.files['file']
+    print(f"[DEBUG] 接收到文件: {file.filename}")
+    
+    try:
+        raw_bytes = file.stream.read()
+        print(f"[DEBUG] 文件大小: {len(raw_bytes)} bytes")
+        
+        # 1. 编码识别
+        try:
+            content = raw_bytes.decode("utf-8-sig")
+            print("[DEBUG] 编码识别: 成功使用 utf-8-sig 解码")
+        except UnicodeDecodeError:
+            content = raw_bytes.decode("gbk", errors="ignore")
+            print("[DEBUG] 编码识别: 成功使用 gbk 解码")
+
+        # 打印文件前100个字符，看是否混入了奇怪的符号
+        print(f"[DEBUG] 文件开头预览: {repr(content[:100])}")
+
+        stream = io.StringIO(content.strip(), newline=None)
+        reader = csv.DictReader(stream)
+        
+        print(f"[DEBUG] 解析到的表头 (Headers): {reader.fieldnames}")
+        
+        conn = get_db_connection()
+        count = 0
+        
+        for i, row in enumerate(reader):
+            # 暴力清洗字典里所有的 Key 和 Value
+            clean_row = {str(k).strip('\ufeff \t"'): str(v).strip() for k, v in row.items() if k is not None}
+            
+            # 只打印前 3 行的数据，防止刷屏
+            if i < 3:
+                print("-" * 30)
+                print(f"[DEBUG] 第 {i+1} 行 原始解析: {row}")
+                print(f"[DEBUG] 第 {i+1} 行 清洗之后: {clean_row}")
+
+            ws_code = clean_row.get('workshop_code')
+            raw_date = clean_row.get('calendar_date', '')
+            
+            # 日期修复逻辑
+            c_date = raw_date
+            if raw_date:
+                raw_date_temp = raw_date.replace('/', '-')
+                parts = raw_date_temp.split('-')
+                if len(parts) == 3:
+                    try:
+                        c_date = f"{parts[0]}-{int(parts[1]):02d}-{int(parts[2]):02d}"
+                    except ValueError:
+                        pass # 忽略非数字的转换错误
+            
+            if i < 3:
+                print(f"[DEBUG] 第 {i+1} 行 日期转换: 原始 [{raw_date}] -> 最终 [{c_date}]")
+
+            # 如果是空行则跳过
+            if not ws_code or not c_date:
+                if i < 3:
+                    print(f"[DEBUG] 第 {i+1} 行 跳过: 缺少车间代码或日期为空")
+                continue
+                
+            # 先删后插
+            conn.execute('DELETE FROM factory_calendar WHERE workshop_code=? AND calendar_date=?', (ws_code, c_date))
+            
+            conn.execute('''
+                INSERT INTO factory_calendar 
+                (workshop_code, workshop_name, calendar_date, is_workday, work_start_time, work_end_time, notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                ws_code, clean_row.get('workshop_name', ''), c_date,
+                int(clean_row.get('is_workday', 1) or 1), 
+                clean_row.get('work_start_time', '08:00'),
+                clean_row.get('work_end_time', '20:00'), 
+                clean_row.get('notes', '')
+            ))
+            count += 1
+            
+        conn.commit()
+        conn.close()
+        print(f"=== [DEBUG] 导入完成！成功处理了 {count} 条数据 ===")
+        print("="*50 + "\n")
+        
+        return jsonify({'success': True, 'message': f'成功导入并更新了 {count} 天的日历数据！'})
+        
+    except Exception as e:
+        print("=== [DEBUG] 发生严重异常 ===")
+        traceback.print_exc()
+        print("="*50 + "\n")
+        return jsonify({'success': False, 'message': f'解析失败, 请检查文件内容: {str(e)}'})
+
+# === 彻底防冲突的新路由 ===
+@app.route('/api/calendar/build', methods=['POST'])
+def build_calendar_new():
+    from database import get_db_connection
+    from datetime import datetime, timedelta
+    from flask import request, jsonify
+    import traceback
+    
+    try:
+        # 绝对安全的无脑解析，无视任何 Header 格式
+        raw_data = request.get_data(as_text=True)
+        import json
+        data = json.loads(raw_data) if raw_data else {}
+        
+        workshop = data.get('workshop', 'SMT')
+        days = int(data.get('days', 30))
+        ws_name = {'SMT': 'SMT车间', 'DIP': 'DIP车间', 'ASSEMBLY': '总装车间'}.get(workshop, workshop)
+        
+        conn = get_db_connection()
+        init_calendar_table(conn)
+        
+        start_date = datetime.now().date()
+        for i in range(days):
+            cur_date = start_date + timedelta(days=i)
+            date_str = cur_date.strftime('%Y-%m-%d')
+            is_weekend = cur_date.weekday() >= 5
+            
+            is_workday = 0 if is_weekend else 1
+            notes = '周末休息' if is_weekend else '正常上班'
+            
+            # 先删后插，无视 SQLite 版本限制
+            conn.execute('DELETE FROM factory_calendar WHERE workshop_code=? AND calendar_date=?', (workshop, date_str))
+            conn.execute('''
+                INSERT INTO factory_calendar 
+                (workshop_code, workshop_name, calendar_date, is_workday, work_start_time, work_end_time, notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (workshop, ws_name, date_str, is_workday, '08:00', '20:00', notes))
+            
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True, 'message': f'成功生成 {ws_name} 未来 {days} 天的日历'})
+        
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': f'生成失败: {str(e)}'})
+
+# ====================================================
+# === 新增：预排交期评估看板 API ===
+# ====================================================
+
+@app.route('/evaluation')
+def evaluation_page():
+    """渲染预排交期评估看板页面"""
+    return render_template('evaluation.html')
+
+@app.route('/api/evaluation/data')
+def get_evaluation_data():
+    """获取所有未排产工单，并进行交期与物料齐套预估"""
+    from database import get_db_connection
+    from datetime import datetime
+    import random # 仅用于演示如果缺少 SRM 数据时的随机物料状态
+    
+    conn = get_db_connection()
+    # 只评估处于 Pending (待排产) 状态的工单
+    orders = conn.execute("SELECT * FROM work_orders WHERE status = 'Pending' ORDER BY deadline").fetchall()
+    conn.close()
+    
+    results = []
+    today = datetime.now().date()
+    
+    # 统计数据
+    stats = {'total': len(orders), 'normal': 0, 'risk': 0, 'shortage': 0}
+    
+    for row in orders:
+        order = dict(row)
+        status = 'Normal'
+        reason = '产能充裕，物料齐套'
+        color = 'success'
+        
+        deadline_str = order.get('deadline')
+        if deadline_str:
+            try:
+                # 兼容处理截取前10位 YYYY-MM-DD
+                deadline_date = datetime.strptime(str(deadline_str)[:10], '%Y-%m-%d').date()
+                days_left = (deadline_date - today).days
+                
+                # 模拟 SRM 物料齐套状态 (由于我们目前没接真实 SRM，用 hash 模拟部分缺料)
+                # 真实场景中这里会读取 order.get('material_ready_level')
+                is_shortage = (hash(order['task_id']) % 10) > 7 # 约 20% 概率模拟缺料
+                
+                if days_left < 0:
+                    status = 'Shortage'
+                    reason = f'已逾期 {abs(days_left)} 天！严重延误！'
+                    color = 'danger'
+                elif is_shortage and days_left < 6:
+                    # T+6 内必须齐套，否则亮红灯
+                    status = 'Shortage'
+                    reason = f'交期仅剩 {days_left} 天，但 SRM 核心物料未齐套！'
+                    color = 'danger'
+                elif days_left <= 7:
+                    # T+7 产能预警
+                    status = 'Risk'
+                    reason = f'交期较近 (T+{days_left})，请密切关注产能占用'
+                    color = 'warning'
+                else:
+                    status = 'Normal'
+                    reason = f'交期健康 (T+{days_left})，具备正常排产条件'
+                    color = 'success'
+                    
+            except Exception as e:
+                status = 'Risk'
+                reason = '交期格式异常，无法准确评估'
+                color = 'secondary'
+                
+        order['eval_status'] = status
+        order['eval_reason'] = reason
+        order['eval_color'] = color
+        
+        # 计入统计
+        if status == 'Normal': stats['normal'] += 1
+        elif status == 'Risk': stats['risk'] += 1
+        elif status == 'Shortage': stats['shortage'] += 1
+        
+        results.append(order)
+        
+    return jsonify({'success': True, 'stats': stats, 'data': results})
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000, host='0.0.0.0', threaded=True)

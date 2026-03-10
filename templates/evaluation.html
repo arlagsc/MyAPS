@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>预排交期评估看板 - MyAPS</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        body { background-color: #f4f6f9; }
+        .toolbar { background: #fff; padding: 15px 20px; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 1000;}
+        .stat-card { border: none; border-radius: 10px; padding: 20px; color: white; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .bg-normal { background: linear-gradient(45deg, #2ecc71, #27ae60); }
+        .bg-risk { background: linear-gradient(45deg, #f1c40f, #f39c12); }
+        .bg-shortage { background: linear-gradient(45deg, #e74c3c, #c0392b); }
+        .table-responsive { max-height: calc(100vh - 220px); overflow-y: auto; background: white; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        thead th { position: sticky; top: 0; background-color: #f8f9fa !important; z-index: 1; border-bottom: 2px solid #ddd; }
+    </style>
+</head>
+<body>
+
+<div class="toolbar">
+    <div class="d-flex align-items-center">
+        <h4 class="m-0 me-4 text-dark"><i class="fas fa-search-dollar text-primary"></i> 预排交期评估看板</h4>
+        <a href="/" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left"></i> 返回总看板</a>
+    </div>
+    <div>
+        <button class="btn btn-primary btn-sm" onclick="loadEvaluation()"><i class="fas fa-sync-alt"></i> 重新评估</button>
+    </div>
+</div>
+
+<div class="container-fluid mt-4 px-4">
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="stat-card bg-primary">
+                <h5 class="opacity-75"><i class="fas fa-layer-group"></i> 待排产工单总数</h5>
+                <h2 id="stat-total" class="m-0 fw-bold">0</h2>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card bg-normal">
+                <h5 class="opacity-75"><i class="fas fa-check-circle"></i> 状态健康 (可直排)</h5>
+                <h2 id="stat-normal" class="m-0 fw-bold">0</h2>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card bg-risk">
+                <h5 class="opacity-75"><i class="fas fa-exclamation-triangle"></i> 交期紧迫 (T+7内)</h5>
+                <h2 id="stat-risk" class="m-0 fw-bold">0</h2>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card bg-shortage">
+                <h5 class="opacity-75"><i class="fas fa-ban"></i> 缺料/严重逾期</h5>
+                <h2 id="stat-shortage" class="m-0 fw-bold">0</h2>
+            </div>
+        </div>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-hover table-bordered align-middle text-center text-nowrap m-0">
+            <thead>
+                <tr>
+                    <th>工单号 (Task ID)</th>
+                    <th>归属车间</th>
+                    <th>产品型号</th>
+                    <th>需求数量</th>
+                    <th>计划交期</th>
+                    <th>评估结论</th>
+                    <th class="text-start">引擎诊断备注</th>
+                </tr>
+            </thead>
+            <tbody id="evalTableBody">
+                <tr><td colspan="7" class="py-4 text-muted">正在进行交期与物料齐套评估，请稍候...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', loadEvaluation);
+
+    function loadEvaluation() {
+        fetch('/api/evaluation/data')
+            .then(res => res.json())
+            .then(data => {
+                if(!data.success) return alert('获取数据失败');
+                
+                // 更新统计卡片
+                document.getElementById('stat-total').innerText = data.stats.total;
+                document.getElementById('stat-normal').innerText = data.stats.normal;
+                document.getElementById('stat-risk').innerText = data.stats.risk;
+                document.getElementById('stat-shortage').innerText = data.stats.shortage;
+
+                // 更新表格
+                const tbody = document.getElementById('evalTableBody');
+                if(data.data.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="7" class="py-5 text-muted">当前没有待排产的工单，请前往配置中心重置数据。</td></tr>`;
+                    return;
+                }
+
+                let html = '';
+                data.data.forEach(row => {
+                    // 为整行添加极淡的背景色
+                    let rowClass = row.eval_status === 'Shortage' ? 'table-danger' : 
+                                  (row.eval_status === 'Risk' ? 'table-warning' : '');
+                    
+                    html += `<tr class="${rowClass}">
+                        <td class="fw-bold text-primary">${row.task_id}</td>
+                        <td>${row.workshop} ${row.smt_side !== '-' ? '('+row.smt_side+'面)' : ''}</td>
+                        <td>${row.product_code}</td>
+                        <td>${row.qty}</td>
+                        <td class="fw-bold">${row.deadline ? row.deadline.substring(0,10) : '-'}</td>
+                        <td><span class="badge bg-${row.eval_color} px-3 py-2" style="font-size:13px">${row.eval_status}</span></td>
+                        <td class="text-start text-${row.eval_color} fw-bold"><i class="fas fa-info-circle me-1"></i>${row.eval_reason}</td>
+                    </tr>`;
+                });
+                tbody.innerHTML = html;
+            });
+    }
+</script>
+</body>
+</html>
